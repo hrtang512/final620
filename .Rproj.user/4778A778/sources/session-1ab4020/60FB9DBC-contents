@@ -4,6 +4,103 @@ format: html
 ---
 
 ```{r}
-# codes
+library(Matrix)
+library(tidyverse)
+load('data/population.rda')
+population = population |> rename(pop = population)
 ```
+
+```{r}
+source("./code/funcs.R")
+cases_raw <- get_cdc_data("https://data.cdc.gov/resource/pwn4-m3yp.json")
+saveRDS(cases_raw, 'cases_raw.rds')
+hosp_raw <- get_cdc_data("https://data.cdc.gov/resource/39z2-9zu6.json")
+saveRDS(hosp_raw, 'hosp_raw.rds')
+deaths_raw <- get_cdc_data("https://data.cdc.gov/resource/r8kw-7aab.json")
+saveRDS(deaths_raw, 'deaths_raw.rds')
+vax_raw <- get_cdc_data("https://data.cdc.gov/resource/rh2h-3yt2.json")
+saveRDS(vax_raw, 'vax_raw.rds')
+```
+
+```{r}
+cases_raw <- cases_raw |> select(state, start_date, cases = new_cases) |>
+  mutate(week = epiweek(start_date), year = epiyear(start_date))|> 
+  mutate(cases = as.integer(cases)) |> select(-start_date)
+
+hosp_raw <- hosp_raw |> select(jurisdiction, collection_date, hosp = new_covid_19_hospital) |>
+  mutate(week = epiweek(collection_date), year = epiyear(collection_date))|> 
+  mutate(hosp = as.integer(hosp)) |> select(-collection_date)|>
+  group_by(jurisdiction, week, year) |>
+  summarise(hosp = sum(hosp))  |> ungroup()
+
+deaths_raw <- deaths_raw |> select(state, year, week = mmwr_week, deaths = covid_19_deaths) |>
+  mutate(year = case_when(str_detect(year, '/') ~ 
+           str_extract(year, "(?<=/)[0-9]+"), # if year contains /, e.g. 2019/2020, then only keep after the /
+         TRUE ~ year)) |> mutate(year = as.numeric(year))  |> 
+  mutate(week = as.numeric(week))
+
+vax_raw <- vax_raw |> filter(date_type == 'Admin') |>
+  select(location, date, booster = booster_cumulative, series = series_complete_cumulative) |>
+  mutate(week = epiweek(date), year = epiyear(date))|> 
+  mutate(booster = as.integer(booster), series = as.integer(series)) |> select(-date) |> 
+  group_by(location, week, year) |>
+  summarise(booster = max(booster), series = max(series))  |> ungroup()
+
+## Make dates data frame
+all_dates <- data.frame(date = seq(make_date(2020, 1, 25),
+                                   make_date(2021, 12, 31), 
+                                   by = "week")) |>
+  mutate(date = ceiling_date(date, unit = "week", week_start = 7) - days(1)) |>
+  mutate(mmwr_year = epiyear(date), mmwr_week = epiweek(date)) 
+
+#Uncomment to run
+dates_and_pop <- cross_join(all_dates, data.frame(state = unique(population$state))) |> left_join(population, by = c("state", "mmwr_year" = "year"))
+```
+
+```{r}
+dat <- dates_and_pop |> left_join(cases_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", "state")) |>
+  mutate(cases = replace_na(cases, 0))
+dat <- dat |> left_join(hosp_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state" =  "jurisdiction")) |>
+  mutate(hosp = replace_na(hosp, 0))
+dat <- dat |> left_join(vax_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state" =  "location")) |>
+  mutate(across(c(booster, series), .fns = ~ replace_na(.x, 0)))
+dat <- dat |> left_join(deaths_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state_name" =  "state")) |>
+  mutate(deaths = as.numeric(deaths)) |>
+  mutate(deaths = replace_na(deaths, 0))
+
+dat <- dat |> arrange(state, date)
+```
+
+
+Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
+```{r}
+dat |> 
+  pivot_longer(c(cases, deaths, hosp), names_to = "outcome",values_to = "rate") |> 
+  mutate(rate = rate / pop * 100000) |>
+  ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + 
+  facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()
+```
+
+To determine when vaccination started and when most of the population was vaccinated, compute the percent of the US population (including DC and Puerto Rico) vaccinated by date. Do the same for the booster. Then plot both percentages.
+```{r}
+p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
+                                   booster = sum(booster)) |>
+  pivot_longer(c(booster, series), names_to = "vaccine", values_to = "rate") |>
+  mutate(rate = rate / pop * 100) |>
+  ggplot(aes(date, rate, color = vaccine)) + geom_line() + theme_classic() + 
+  ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')
+print(p)
+```
+
 

@@ -3,7 +3,7 @@
     "path": "~/Documents/UmichStudy/2025Winter/Biostat620/final620/final620_code.qmd",
     "project_path": "final620_code.qmd",
     "type": "quarto_markdown",
-    "hash": "3162511939",
+    "hash": "1361647412",
     "contents": "",
     "dirty": false,
     "created": 1744131032930.0,
@@ -15,18 +15,19 @@
         "tempName": "Untitled1",
         "source_window_id": "",
         "Source": "Source",
-        "cursorPosition": "6,7",
-        "scrollLine": "0",
+        "cursorPosition": "105,0",
+        "scrollLine": "104",
         "docOutlineVisible": "1",
         "rmdVisualCollapsedChunks": "",
-        "rmdVisualModeLocation": "41:0"
+        "rmdVisualModeLocation": "41:0",
+        "docOutlineSize": "74"
     },
     "folds": "",
-    "lastKnownWriteTime": 1744131050,
+    "lastKnownWriteTime": 1744143334,
     "encoding": "UTF-8",
     "collab_server": "",
     "source_window": "",
-    "last_content_update": 1744131050101,
+    "last_content_update": 1744143334116,
     "read_only": false,
     "read_only_alternatives": []
 }

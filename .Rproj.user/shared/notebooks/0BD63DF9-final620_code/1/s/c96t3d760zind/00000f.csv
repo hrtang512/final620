@@ -1,0 +1,7 @@
+"0","p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),"
+"0","                                   booster = sum(booster)) |>"
+"0","  pivot_longer(c(booster, series), names_to = ""vaccine"", values_to = ""rate"") |>"
+"0","  mutate(rate = rate / pop * 100) |>"
+"0","  ggplot(aes(date, rate, color = vaccine)) + geom_line() + theme_classic() + "
+"0","  ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')"
+"0","print(p)"
