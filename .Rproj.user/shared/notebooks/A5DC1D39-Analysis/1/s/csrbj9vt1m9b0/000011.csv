@@ -1,0 +1,5 @@
+"0","dat |> "
+"0","  pivot_longer(c(cases, deaths, hosp), names_to = ""outcome"",values_to = ""rate"") |> "
+"0","  mutate(rate = rate / pop * 100000) |>"
+"0","  ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + "
+"0","  facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()"

@@ -1,0 +1,28 @@
+---
+title: "Analysis"
+format: html
+---
+
+```{r}
+load('data/dat.rda')
+```
+
+Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
+```{r}
+dat |> 
+  pivot_longer(c(cases, deaths, hosp), names_to = "outcome",values_to = "rate") |> 
+  mutate(rate = rate / pop * 100000) |>
+  ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + 
+  facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()
+```
+
+To determine when vaccination started and when most of the population was vaccinated, compute the percent of the US population (including DC and Puerto Rico) vaccinated by date. Do the same for the booster. Then plot both percentages.
+```{r}
+p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
+                                   booster = sum(booster)) |>
+  pivot_longer(c(booster, series), names_to = "vaccine", values_to = "rate") |>
+  mutate(rate = rate / pop * 100) |>
+  ggplot(aes(date, rate, color = vaccine)) + geom_line() + theme_classic() + 
+  ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')
+print(p)
+```
