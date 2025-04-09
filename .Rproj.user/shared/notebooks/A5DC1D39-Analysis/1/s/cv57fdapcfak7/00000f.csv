@@ -1,1 +1,3 @@
 "0","load('data/dat.rda')"
+"0","dat = dat |>"
+"0","  mutate(date_num = as.numeric(date))"

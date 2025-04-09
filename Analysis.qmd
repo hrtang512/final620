@@ -4,8 +4,19 @@ format: html
 ---
 
 ```{r}
-load('data/dat.rda')
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme)
 ```
+
+
+```{r}
+load('data/dat.rda')
+dat = dat |>
+  mutate(date_num = as.numeric(date))
+```
+
+
+### Analysis from pset4
 
 Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
 ```{r}
@@ -26,3 +37,47 @@ p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
   ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')
 print(p)
 ```
+
+
+### LME Models
+
+#### Prepare variables
+```{r}
+dat = dat |> 
+  mutate(
+    death_rate = deaths / pop * 1e5,
+    case_rate = cases / pop * 1e5,
+    hosp_rate = hosp / pop * 1e5,
+    vax_rate = series / pop * 1e2,  # percent fully vaccinated
+    booster_rate = booster / pop * 1e2  # percent boosted
+  )
+```
+
+
+##### Model 1 AR1
+```{r}
+model_1 = lmer(death_rate ~ case_rate + hosp_rate + vax_rate + booster_rate +
+               ns(date_num, df = 5) + (1 | state), data = dat)
+summary(model_1)
+plot(ggpredict(model_1, terms="date_num [all]"))
+```
+##### Model 2 random slope
+
+```{r}
+dat = dat |> arrange(state, date)
+model_auto = lme(
+  death_rate ~ case_rate + hosp_rate + vax_rate + booster_rate,
+  random = ~ 1 | state,
+  correlation = corAR1(form = ~ date | state),
+  data = dat
+)
+
+summary(model_auto)
+```
+
+
+
+
+
+
+
