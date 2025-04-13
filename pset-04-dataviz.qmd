@@ -1,0 +1,313 @@
+---
+title: Problem set 4
+date: 2025-02-09
+---
+
+## Introduction 
+
+In this problem set, we aim to use data visualization to explore the following questions: 
+
+1. Based on SARS-Cov-2 cases, COVID-19 deaths and hospitalizations what periods defined the worst two waves of 2020-2021?
+2. Did states with higher vaccination rates experience lower COVID-19 death rates?
+3. Were there regional differences in vaccination rates?
+
+We are not providing definitive answers to these questions but rather generating visualizations that may offer insights.
+
+### Objective 
+
+We will create a single data frame that contains relevant observations for each jurisdiction, for each Morbidity and Mortality Weekly Report (MMWR) period in 2020 and 2021. The key outcomes of interest are:
+
+- SARS-CoV-2 cases
+- COVID-19 hospitalizations
+- COVID-19 deaths
+- Individuals receiving their first COVID-19 vaccine dose
+- Individuals receiving a booster dose
+
+### Task Breakdown
+
+Your task is divided into three parts:
+
+1. **Download the data**: Retrieve population data from the US Census API and COVID-19 statistics from the CDC API.
+2. **Wrangle the data**: Clean and join the datasets to create a final table containing all the necessary information.
+3. **Create visualizations**: Generate graphs to explore potential insights into the questions posed above.
+
+## Instructions {.unnumbered}
+
+* As usual, copy and place the `pset-04-dataviz.qmd` file in a new directory called `p4`.
+
+*  Within your `p4` directory, create the following directory:
+   - `code`
+
+* Inside the `code` directory, include the following files:
+   - `funcs.R`
+   - `wrangle.R`
+
+Detailed instructions follow for each of the tasks.
+
+## Download data
+
+For this part we want the following:
+
+* Save all your code in a file called `wrangle.R` that produces the final data frame.
+* When executed, this code should save the final data frame in an RDA file in the `data` directory. 
+
+1. Copy the relevant code from the previous homework to create the `population` data frame. Put this code in the the `wrangle.R` file in the `code` directory. Comment the code so we know where the population is created, where the regions are read in, and where we combine these. Test your script by sourcing the file.
+
+Test that your wrangling code works:
+
+```{r}
+source("./code/wrangle.R")
+head(population)
+```
+
+2. In the previous problem set we wrote the following script to download cases data:
+
+```{r}
+#| eval: false
+api <- "https://data.cdc.gov/resource/pwn4-m3yp.json"
+cases_response <- request(api) |> 
+  req_url_query("$limit" = 10000000) |>
+  req_perform() 
+saveRDS(cases_response, 'cases_response.rds')
+cases_raw <- cases_response |> 
+  resp_body_json(simplifyVector = TRUE)
+```
+
+We are now going to download three other datasets from CDC that provide hospitalization, provisional COVID deaths, and vaccine data. A different endpoint is provided for each one, but the requests are the same otherwise. To avoid rewriting the same code more than once, write a function called `get_cdc_data` that receives and endpoint and returns a data frame. Save this code in a file called `funcs.R`.
+
+3. Use `get_cdc_data` to download the cases, hospitalization, deaths, and vaccination data and save the data frames. We recommend saving them into objects called: `cases_raw`,  `hosp_raw`, `deaths_raw`, and `vax_raw`.
+
+* cases - `https://data.cdc.gov/resource/pwn4-m3yp.json`
+* hospitalizations - `https://data.cdc.gov/resource/39z2-9zu6.json`
+* deaths - `https://data.cdc.gov/resource/r8kw-7aab.json`
+* vaccinations `https://data.cdc.gov/resource/rh2h-3yt2.json`
+
+We recommend saving them into objects called: `cases_raw`,  `hosp_raw`, `deaths_raw`, and `vax_raw`. 
+
+```{r}
+source("./code/funcs.R")
+cases_raw <- get_cdc_data("https://data.cdc.gov/resource/pwn4-m3yp.json")
+saveRDS(cases_raw, 'cases_raw.rds')
+hosp_raw <- get_cdc_data("https://data.cdc.gov/resource/39z2-9zu6.json")
+saveRDS(hosp_raw, 'hosp_raw.rds')
+deaths_raw <- get_cdc_data("https://data.cdc.gov/resource/r8kw-7aab.json")
+saveRDS(deaths_raw, 'deaths_raw.rds')
+vax_raw <- get_cdc_data("https://data.cdc.gov/resource/rh2h-3yt2.json")
+saveRDS(vax_raw, 'vax_raw.rds')
+```
+Take a look at all the dataframes you just read in.
+
+```{r}
+### Uncomment this to run this
+print(head(cases_raw))
+print(head(hosp_raw))
+print(head(deaths_raw))
+print(head(vax_raw))
+```
+
+## Wrangling Challenge
+
+In this section, you will wrangle the files downloaded in the previous step into a single data frame containing all the necessary information. We recommend using the following column names: `date`, `state`, `cases`, `hosp`, `deaths`, `vax`, `booster`, and `population`.
+
+### Key Considerations {.unnumbered}
+
+* **Align reporting periods**: Ensure that the time periods for which each outcome is reported are consistent. Specifically, calculate the totals for each Morbidity and Mortality Weekly Report (MMWR) period.
+
+* **Harmonize variable names**: To facilitate the joining of datasets, rename variables so that they match across all datasets.
+
+4. One challenge is data frames use different column names to represent the same variable. Examine each data frame and report back 1) the name of the column with state abbreviations, 2) if the rate is yearly, monthly, or weekly, daily data, 3) all the column names that provide date information.
+
+
+| Outcome | Jurisdiction variable name |  Rate | time variable names | 
+|---------|--------|---------------|----------------|
+| cases  |state | weekly | start_date, end_date (optional), date_updated (optional)|
+| hospitalizations | jurisdiction| daily| collection_date|
+| deaths | state| weekly |year, mmwr_week |
+| vaccines | location| daily |date |
+
+Note: there are multiple possible correct answers. We do not list them all here.
+
+
+5. Wrangle the cases data frame to keep state, MMWR year, MMWR week, and the total number of cases for that week in that state.
+Hint: Use `as_date`, `ymd_hms`, `epiweek` and `epiyear` functions in the **lubridate** package. Comment appropriately. Display the result.
+
+```{r}
+library(lubridate)
+cases_raw <- cases_raw |> select(state, start_date, cases = new_cases) |>
+  mutate(week = epiweek(start_date), year = epiyear(start_date))|> 
+  mutate(cases = as.integer(cases)) |> select(-start_date)
+head(cases_raw)
+```
+
+6. Now repeat the same exercise for hospitalizations. Note that you will have to collapse the data into weekly data and keep the same columns as in the cases dataset, except keep total weekly hospitalizations instead of cases. Remove weeks with less than 7 days reporting. Display your result and comment appropriately.
+
+```{r}
+library(lubridate)
+hosp_raw <- hosp_raw |> select(jurisdiction, collection_date, hosp = new_covid_19_hospital) |>
+  mutate(week = epiweek(collection_date), year = epiyear(collection_date))|> 
+  mutate(hosp = as.integer(hosp)) |> select(-collection_date)|>
+  group_by(jurisdiction, week, year) |>
+  summarise(hosp = sum(hosp))  |> ungroup()
+head(hosp_raw)
+```
+
+7. Repeat what you did in the previous two exercises for provisional COVID-19 deaths. Display the result and comment appropriately.
+
+```{r}
+deaths_raw <- deaths_raw |> select(state, year, week = mmwr_week, deaths = covid_19_deaths) |>
+  mutate(year = case_when(str_detect(year, '/') ~ 
+           str_extract(year, "(?<=/)[0-9]+"), # if year contains /, e.g. 2019/2020, then only keep after the /
+         TRUE ~ year)) |> mutate(year = as.numeric(year))  |> 
+  mutate(week = as.numeric(week))
+print(head(deaths_raw))
+```
+
+8. Repeat this now for vaccination data. Keep the variables `series_complete` and `booster` along with state and date. Display the result and comment appropriately. Hint: only use the rows with `date_type == 'Admin'` to only include vaccine data based on the day it was administered, rather than reported.
+
+```{r}
+vax_raw <- vax_raw |> filter(date_type == 'Admin') |>
+  select(location, date, booster = booster_cumulative, series = series_complete_cumulative) |>
+  mutate(week = epiweek(date), year = epiyear(date))|> 
+  mutate(booster = as.integer(booster), series = as.integer(series)) |> select(-date) |> 
+  group_by(location, week, year) |>
+  summarise(booster = max(booster), series = max(series))  |> ungroup()
+head(vax_raw)
+```
+
+9. Now we are ready to join the tables. We will only consider 2020 and 2021 as we don't have population sizes for 2022. However, because we want to guarantee that all dates are included we will create a data frame with all possible weeks. We can use this:
+
+```{r}
+## Make dates data frame
+all_dates <- data.frame(date = seq(make_date(2020, 1, 25),
+                                   make_date(2021, 12, 31), 
+                                   by = "week")) |>
+  mutate(date = ceiling_date(date, unit = "week", week_start = 7) - days(1)) |>
+  mutate(mmwr_year = epiyear(date), mmwr_week = epiweek(date)) 
+
+#Uncomment to run
+dates_and_pop <- cross_join(all_dates, data.frame(state = unique(population$state))) |> left_join(population, by = c("state", "mmwr_year" = "year"))
+```
+
+Now join all the tables to create your final table. Make sure it is ordered by date within each state. Call it `dat`.  Show a few rows here.
+
+```{r}
+dat <- dates_and_pop |> left_join(cases_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", "state")) |>
+  mutate(cases = replace_na(cases, 0))
+dat <- dat |> left_join(hosp_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state" =  "jurisdiction")) |>
+  mutate(hosp = replace_na(hosp, 0))
+dat <- dat |> left_join(vax_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state" =  "location")) |>
+  mutate(across(c(booster, series), .fns = ~ replace_na(.x, 0)))
+dat <- dat |> left_join(deaths_raw,
+                           by = c("mmwr_year" = "year", 
+                                  "mmwr_week" = "week", 
+                                  "state_name" =  "state")) |>
+  mutate(deaths = as.numeric(deaths)) |>
+  mutate(deaths = replace_na(deaths, 0))
+
+dat <- dat |> arrange(state, date)
+
+head(dat)
+```
+
+
+
+## Data visualization: generate some plots
+
+We are now ready to create some figures. For each question below, write code that generates a plot that addresses the question.
+
+10. Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
+
+```{r, fig.height=8, fig.width = 6}
+dat |> 
+  pivot_longer(c(cases, deaths, hosp), names_to = "outcome",values_to = "rate") |> 
+  mutate(rate = rate / pop * 100000) |>
+  ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + 
+  facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()
+### YOUR CODE HERE
+```
+
+11. To determine when vaccination started and when most of the population was vaccinated, compute the percent of the US population (including DC and Puerto Rico) vaccinated by date. Do the same for the booster. Then plot both percentages.
+
+```{r}
+p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
+                                   booster = sum(booster)) |>
+  pivot_longer(c(booster, series), names_to = "vaccine", values_to = "rate") |>
+  mutate(rate = rate / pop * 100) |>
+  ggplot(aes(date, rate, color = vaccine)) + geom_line() + theme_classic() + 
+  ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')
+print(p)
+```
+
+12. Plot the distribution of vaccination rates across states on July 1, 2021.
+
+```{r}
+p <- dat |> filter(mmwr_year == '2021' & mmwr_week == epiweek(make_date(2021, 7, 1))) |>
+  mutate(rate = series / pop * 100) |>
+  ggplot(aes(rate)) + geom_histogram(binwidth = 5) + theme_classic() + 
+  xlab('Vaccination rate') + ylab("Number of states") + 
+  ggtitle('Distribution of vaccination rate across states')
+print(p)
+```
+
+13. Is there a difference across region? Generate a plot of your choice.
+
+```{r}
+rate_dat <- dat |> filter(mmwr_year == '2021' & mmwr_week == epiweek(make_date(2021, 7, 1))) |>
+  mutate(rate = series / pop * 100)
+region_order <- rate_dat |> group_by(region_name) |> summarise(rate = mean(rate)) |> arrange(rate) |> pull(region_name)
+
+p <- rate_dat |>
+  ggplot(aes(factor(region_name, region_order), y = rate)) + geom_boxplot() + theme_classic() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + xlab('region') + 
+  ylab("vaccination rate") + ggtitle('vaccination rates by region')
+print(p)
+```
+Discuss what the plot shows.
+
+Vaccination rates are highly different by region, with the south at the lowest and the northeast at the highest.
+
+14. Using the previous figures, identify a time period that meets the following criteria:
+- A significant COVID-19 wave occurred across the United States.
+- A sufficient number of people had been vaccinated.
+
+Next, follow these steps:
+
+- For each state, calculate the **COVID-19 deaths per day per 100,000 people** during the selected time period.
+- Determine the **vaccination rate (primary series)** in each state as of the last day of the period.
+- Create a scatter plot to visualize the relationship between these two variables:
+   - The **x-axis** should represent the vaccination rate.
+   - The **y-axis** should represent the deaths per day per 100,000 people.
+   
+```{r}
+start_date <- make_date(2021, 3, 1); end_date <- make_date(2021, 9, 1)
+dat |> filter(date >= start_date & date <= end_date) |>
+  mutate(death_rate = deaths / pop * 100000, vax_rate = series / pop * 100) |>
+  group_by(state) |> summarize(death_rate = sum(death_rate, na.rm = TRUE), 
+                               vax_rate = max(vax_rate)) |>
+  ggplot(aes(vax_rate, death_rate, label = state)) + geom_point() + 
+  geom_label() + theme_classic() 
+
+```
+
+
+15. Repeat the exercise for the booster.
+
+```{r}
+start_date <- make_date(2021, 10, 1); end_date <- make_date(2021, 12, 31)
+dat |> filter(date >= start_date & date <= end_date) |>
+  mutate(death_rate = deaths / pop * 100000, vax_rate = booster / pop * 100) |>
+  group_by(state) |> summarize(death_rate = sum(death_rate, na.rm = TRUE), 
+                               vax_rate = max(vax_rate)) |>
+  ggplot(aes(vax_rate, death_rate, label = state)) + geom_point() + 
+  geom_label() + theme_classic() 
+
+```
+

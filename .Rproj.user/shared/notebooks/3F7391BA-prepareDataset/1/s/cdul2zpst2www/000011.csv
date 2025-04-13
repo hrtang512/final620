@@ -7,8 +7,8 @@
 "0","  mutate(hosp = as.integer(hosp)) |> select(-collection_date)|>"
 "0","  group_by(jurisdiction, week, year) |>"
 "0","  summarise(hosp = sum(hosp))  |> ungroup()"
-"1","[38;5;251m`summarise()` has grouped output by 'jurisdiction', 'week'. You can
-override using the `.groups` argument.[39m
+"1","[38;5;239m`summarise()` has grouped output by 'jurisdiction', 'week'. You can override using the
+`.groups` argument.[39m
 "
 "0","deaths_raw <- deaths_raw |> select(state, year, week = mmwr_week, deaths = covid_19_deaths) |>"
 "0","  mutate(year = case_when(str_detect(year, '/') ~ "
@@ -16,14 +16,19 @@ override using the `.groups` argument.[39m
 "0","         TRUE ~ year)) |> mutate(year = as.numeric(year))  |> "
 "0","  mutate(week = as.numeric(week))"
 "0",""
+"0","deaths_raw = deaths_raw |> "
+"0","  mutate("
+"0","    year = ifelse(year == 2021 & week == 53, 2020, year)"
+"0","  )"
+"0",""
 "0","vax_raw <- vax_raw |> filter(date_type == 'Admin') |>"
 "0","  select(location, date, booster = booster_cumulative, series = series_complete_cumulative) |>"
 "0","  mutate(week = epiweek(date), year = epiyear(date))|> "
 "0","  mutate(booster = as.integer(booster), series = as.integer(series)) |> select(-date) |> "
 "0","  group_by(location, week, year) |>"
 "0","  summarise(booster = max(booster), series = max(series))  |> ungroup()"
-"1","[38;5;251m`summarise()` has grouped output by 'location', 'week'. You can override
-using the `.groups` argument.[39m
+"1","[38;5;239m`summarise()` has grouped output by 'location', 'week'. You can override using the `.groups`
+argument.[39m
 "
 "0","## Make dates data frame"
 "0","all_dates <- data.frame(date = seq(make_date(2020, 1, 25),"

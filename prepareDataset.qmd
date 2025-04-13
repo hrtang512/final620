@@ -6,6 +6,8 @@ format: html
 ```{r}
 library(Matrix)
 library(tidyverse)
+library(jsonlite)
+library(httr2)
 load('data/population.rda')
 population = population |> rename(pop = population)
 ```
@@ -38,6 +40,11 @@ deaths_raw <- deaths_raw |> select(state, year, week = mmwr_week, deaths = covid
            str_extract(year, "(?<=/)[0-9]+"), # if year contains /, e.g. 2019/2020, then only keep after the /
          TRUE ~ year)) |> mutate(year = as.numeric(year))  |> 
   mutate(week = as.numeric(week))
+
+deaths_raw = deaths_raw |> 
+  mutate(
+    year = ifelse(year == 2021 & week == 53, 2020, year)
+  )
 
 vax_raw <- vax_raw |> filter(date_type == 'Admin') |>
   select(location, date, booster = booster_cumulative, series = series_complete_cumulative) |>

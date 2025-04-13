@@ -5,7 +5,7 @@ format: html
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme)
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines)
 ```
 
 
@@ -51,33 +51,135 @@ dat = dat |>
     vax_rate = series / pop * 1e2,  # percent fully vaccinated
     booster_rate = booster / pop * 1e2  # percent boosted
   )
+
+dat = dat |> 
+  group_by(state) |> 
+  arrange(date) |> 
+  mutate(
+    case_rate_lag2 = lag(case_rate, 2),
+    hosp_rate_lag2 = lag(hosp_rate, 2)
+  ) |> 
+  ungroup()
+
+dat_nofirst2 = dat |>
+  filter(!is.na(case_rate_lag2), !is.na(hosp_rate_lag2))
 ```
 
 
-##### Model 1 AR1
+##### Model 1 lmer
 ```{r}
-model_1 = lmer(death_rate ~ case_rate + hosp_rate + vax_rate + booster_rate +
-               ns(date_num, df = 5) + (1 | state), data = dat)
+model_1 = lmer(death_rate ~ case_rate + hosp_rate + vax_rate + booster_rate + ns(date_num, df = 5) + (1 | state), data = dat_nofirst2)
+
 summary(model_1)
+
+
 plot(ggpredict(model_1, terms="date_num [all]"))
+AIC(model_1)
 ```
-##### Model 2 random slope
+
+
+
+##### Model 2 lag cases hosp
+```{r}
+model_lag = lmer(death_rate ~ case_rate_lag2 + hosp_rate_lag2 + vax_rate + booster_rate + ns(date_num, df = 8) + (1 | state), data = dat_nofirst2)
+
+summary(model_lag)
+
+plot(ggpredict(model_lag, terms="date_num [all]"))
+AIC(model_lag)
+```
 
 ```{r}
-dat = dat |> arrange(state, date)
-model_auto = lme(
-  death_rate ~ case_rate + hosp_rate + vax_rate + booster_rate,
-  random = ~ 1 | state,
-  correlation = corAR1(form = ~ date | state),
-  data = dat
+aic_results = tibble(df = 2:10, AIC = NA_real_)
+
+# Loop over degrees of freedom
+for (i in 2:10) {
+  model = lmer(death_rate ~ case_rate_lag2 + hosp_rate_lag2 + vax_rate + booster_rate +
+                 ns(date_num, df = i) + (1 | state), data = dat_nofirst2)
+  aic_results$AIC[aic_results$df == i] = AIC(model)
+}
+
+print(aic_results)
+which.min(aic_results$AIC)
+```
+
+
+
+```{r}
+fit = model_lag
+state_to_plot = "CA"
+
+# Remove rows with missing lagged predictors before prediction
+dat_pred = dat |>
+  filter(!is.na(case_rate_lag2), !is.na(hosp_rate_lag2)) |>
+  mutate(predicted = predict(fit))
+
+# Join predictions back to full data (optional, only if you want to keep NA rows in plotting)
+dat_state = dat |> 
+  filter(state == state_to_plot) |>
+  left_join(dat_pred |> select(state, date, predicted), by = c("state", "date"))
+
+# Plot observed vs predicted
+ggplot(dat_state, aes(x = date)) +
+  geom_point(aes(y = death_rate), color = "red", alpha = 0.6, size = 1.2) +  # Observed
+  geom_line(aes(y = predicted), color = "blue", linewidth = 1) +  # Predicted
+  labs(title = paste("Observed vs. Predicted Death Rate in", state_to_plot),
+       y = "Death Rate (per 100,000)",
+       x = "Date") +
+  theme_minimal()
+```
+
+### Model Diagnostics
+```{r}
+plot(model_lag)  # base R method for lmer
+
+resid_df = data.frame(
+  fitted = fitted(model_lag),
+  residuals = resid(model_lag)
 )
 
-summary(model_auto)
+ggplot(resid_df, aes(x = fitted, y = residuals)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  theme_minimal() +
+  labs(title = "Residuals vs. Fitted", x = "Fitted", y = "Residuals")
 ```
 
+```{r}
+qqnorm(resid(model_lag))
+qqline(resid(model_lag), col = "blue")
 
+data.frame(resid = resid(model_lag)) |> 
+  ggplot(aes(sample = resid)) +
+  stat_qq() +
+  stat_qq_line(color = "blue") +
+  theme_minimal() +
+  labs(title = "Q-Q Plot of Residuals")
+```
 
+### Excess death rate
+```{r}
+# Predict death rate using the lag model
+dat_excess = dat_nofirst2 |> 
+  mutate(predicted_death_rate = predict(model_lag),
+         excess_death_rate = death_rate - predicted_death_rate)
 
+# View a few rows
+head(dat_excess |> select(state, date, death_rate, predicted_death_rate, excess_death_rate))
+```
 
+```{r}
+state_to_plot = "CA"
+
+dat_excess |> 
+  filter(state == state_to_plot) |> 
+  ggplot(aes(x = date, y = excess_death_rate)) +
+  geom_line(color = "darkred") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  theme_minimal() +
+  labs(title = paste("Excess Death Rate Over Time in", state_to_plot),
+       y = "Excess Death Rate (per 100,000)",
+       x = "Date")
+```
 
 
