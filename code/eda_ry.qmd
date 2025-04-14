@@ -1,0 +1,245 @@
+---
+title: "eda"
+format: html
+---
+
+```{r}
+library(usmap)
+library(ggplot2)
+library(gganimate)
+library(gifski)
+library(dplyr)
+library(lubridate)
+library(transformr)
+
+
+# 添加死亡率
+dat <- dat |> 
+  mutate(death_rate = deaths / population * 100000)
+
+# 转为每月第一天为单位（方便动画帧控制）
+dat_monthly <- dat |> 
+  mutate(date_month = floor_date(date, "month")) |>
+  group_by(state, date_month) |>
+  summarise(death_rate = mean(death_rate, na.rm = TRUE), .groups = "drop")
+
+# 动态地图绘图对象
+p <- plot_usmap(data = dat_monthly, values = "death_rate", regions = "states") +
+  scale_fill_gradient(low = "white", high = "red", name = "Deaths per 100K") +
+  labs(
+    title = "Monthly COVID-19 Death Rate by State",
+    subtitle = "{format(frame_time, '%B %Y')}",
+    caption = "Source: CDC",
+    fill = "Death Rate"
+  ) +
+  theme_void(base_size = 13) +
+  theme(legend.position = "right") +
+  transition_time(date_month) +
+  ease_aes("linear")
+
+# 使用 gifski 渲染器渲染动画
+anim_obj <- animate(p, width = 1000, height = 700, fps = 5, renderer = gifski_renderer())
+
+# 保存 GIF
+anim_save("us_death_rate.gif", animation = anim_obj)
+```
+
+
+
+```{r}
+library(ggplot2)
+library(viridis)  # 也可以使用 viridis 色板
+library(scales)
+
+# 确保 region_name 是 factor 且顺序合理
+dat$region_name <- factor(dat$region_name)
+
+# 绘图代码
+dat |> 
+  pivot_longer(c(cases, deaths, hosp), names_to = "outcome", values_to = "rate") |> 
+  mutate(rate = rate / pop * 100000) |> 
+  ggplot(aes(x = date, y = rate, group = state, color = region_name)) +
+  geom_line(alpha = 0.7, linewidth = 0.5) +  # 增加线条粗细和透明度
+  facet_wrap(~outcome, ncol = 1, scales = "free_y") +
+  scale_color_viridis_d(option = "C", end = 0.9) +  # 使用高对比的色板
+  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
+  labs(
+    title = "COVID-19 US Trends by State and Region (2020–2023)",
+    subtitle = "Rates per 100,000 population: cases, deaths, and hospitalizations",
+    x = "Date",
+    y = "Rate per 100,000",
+    color = "Region",
+    caption = "Source: CDC, US Census"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 9),
+    legend.position = "right"
+  )
+```
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(viridis)
+library(scales)
+
+# 聚合全国数据：按每周合并所有州
+us_national_trend <- dat |> 
+  group_by(date) |>
+  summarise(
+    pop = sum(pop, na.rm = TRUE),
+    cases = sum(cases, na.rm = TRUE),
+    deaths = sum(deaths, na.rm = TRUE),
+    hosp = sum(hosp, na.rm = TRUE)
+  ) |> 
+  pivot_longer(cols = c(cases, deaths, hosp), names_to = "outcome", values_to = "count") |>
+  mutate(rate = count / pop * 100000)
+
+# 绘图：全国趋势
+ggplot(us_national_trend, aes(x = date, y = rate, color = outcome)) +
+  geom_line(linewidth = 1) +
+  scale_color_manual(values = c("cases" = "#1f77b4", "deaths" = "#d62728", "hosp" = "#2ca02c")) +
+  facet_wrap(~ outcome, ncol = 1, scales = "free_y") +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
+  labs(
+    title = "COVID-19 Trends in the United States (2020–2023)",
+    subtitle = "National rates per 100,000 population: cases, deaths, hospitalizations",
+    x = "Date",
+    y = "Rate per 100,000",
+    color = "Outcome",
+    caption = "Source: CDC, US Census"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 9),
+    legend.position = "none"
+  )
+```
+
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+
+dat |> 
+  select(death_rate, case_rate, hosp_rate, vax_rate, booster_rate) |>
+  pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
+  ggplot(aes(x = value, y = death_rate)) +
+  geom_bin2d(bins = 80) +  # 控制颜色格子数量
+  facet_wrap(~ predictor, scales = "free_x") +
+  scale_fill_viridis_c(option = "C") +
+  labs(
+    title = "2D Histogram: Death Rate vs Predictors (No Lag)",
+    x = "Predictor Value",
+    y = "Death Rate (per 100,000)"
+  ) +
+  theme_minimal()
+
+dat_nofirst2 |> 
+  select(death_rate, case_rate_lag2, hosp_rate_lag2, vax_rate, booster_rate) |>
+  pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
+  ggplot(aes(x = value, y = death_rate)) +
+  geom_bin2d(bins = 80) +  # 控制颜色格子数量
+  facet_wrap(~ predictor, scales = "free_x") +
+  scale_fill_viridis_c(option = "C") +
+  labs(
+    title = "2D Histogram: Death Rate vs Predictors",
+    x = "Predictor Value",
+    y = "Death Rate (per 100,000)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+dat_nofirst2 |> 
+  select(death_rate, case_rate, hosp_rate, vax_rate, booster_rate) |>
+  GGally::ggpairs()
+
+dat_nofirst2 |> 
+  select(death_rate, case_rate_lag2, hosp_rate_lag2, vax_rate, booster_rate) |>
+  GGally::ggpairs()
+```
+
+```{r}
+library(tidyverse)
+dat_nofirst2 |> 
+  group_by(date) |>
+  summarise(vax = mean(vax_rate, na.rm = TRUE),
+            booster = mean(booster_rate, na.rm = TRUE)) |>
+  pivot_longer(cols = c(vax, booster), names_to = "type", values_to = "rate") |>
+  ggplot(aes(x = date, y = rate, color = type)) +
+  geom_line() +
+  labs(title = "Vaccination Rates Over Time (US Average)",
+       x = "Date", y = "Percent of Population",
+       color = "Vaccine Type") +
+  theme_minimal()
+```
+```{r}
+#可以分wave做
+dat_nofirst2 |> 
+  filter(lubridate::year(date) == 2021) |>
+  ggplot(aes(x = reorder(state, death_rate, median, na.rm = TRUE), y = death_rate)) +
+  geom_boxplot() +
+  labs(title = "State-wise Distribution of Death Rate (2021)",
+       x = "State", y = "Death Rate (per 100,000)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+```{r}
+library(lubridate)
+dat_nofirst2 |> 
+  mutate(month = floor_date(date, "month")) |>
+  group_by(state, month) |>
+  summarise(
+    death_rate = mean(death_rate, na.rm = TRUE),
+    vax_rate = mean(vax_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = month, y = state, fill = vax_rate)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(name = "Vax Rate") +
+  labs(title = "Vaccination Rate Heatmap by State and Month",
+       x = "Month", y = "State") +
+  theme_minimal()
+
+```
+```{r}
+library(tidyverse)
+
+dat_nofirst2 |> 
+  select(date, state, death_rate, vax_rate, booster_rate) |> 
+  pivot_longer(cols = c(vax_rate, booster_rate), names_to = "type", values_to = "rate") |>
+  ggplot(aes(x = rate, y = death_rate)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +
+  facet_wrap(~type, scales = "free_x") +
+  labs(
+    title = "Relationship Between Vaccination Rates and Death Rate",
+    x = "Vaccination / Booster Rate (%)",
+    y = "Death Rate (per 100,000)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#可以加加强针
+dat_nofirst2 |>
+  mutate(
+    vax_group = cut(vax_rate, breaks = c(0, 25, 50, 75, 100), include.lowest = TRUE),
+    booster_group = cut(booster_rate, breaks = c(0, 25, 50, 75, 100), include.lowest = TRUE)
+  ) |>
+  group_by(vax_group) |>
+  summarise(mean_death = mean(death_rate, na.rm = TRUE)) |>
+  ggplot(aes(x = vax_group, y = mean_death)) +
+  geom_col(fill = "steelblue") +
+  labs(
+    title = "Average Death Rate by Vaccination Group",
+    x = "Vaccination Rate Group (%)",
+    y = "Mean Death Rate (per 100,000)"
+  ) +
+  theme_minimal()
+```
+
