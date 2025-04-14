@@ -5,7 +5,7 @@ format: html
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext)
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext, usmap, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr)
 ```
 
 
