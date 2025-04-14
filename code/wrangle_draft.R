@@ -2,6 +2,7 @@ library(readxl)
 library(tidyverse)
 library(janitor)
 
+# https://www.census.gov/data/tables/time-series/demo/popest/2020s-national-total.html
 pop_raw <- read_excel("data/NST-EST2024-POP.xlsx", skip = 3) |>
   clean_names() 
 
