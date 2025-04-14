@@ -15,8 +15,10 @@ dat = dat |>
   mutate(date_num = as.numeric(date))
 ```
 
-
+### EDA
 ### Analysis from pset4
+
+###Describe if COVID-19 became less or more virulent across the different periods.
 
 Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
 ```{r}
@@ -37,6 +39,49 @@ p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
   ylab('percent vaccinated') + ggtitle('COVID 19 US Vaccination rates over time')
 print(p)
 ```
+
+### Divide the pandemic period, 2020/01/20 to 2023/05/11(first confirmed case of COVID-19, to the end of the public health emergency) into waves. For each period compute the deaths rates by state. Describe which states did better or worse during the different periods.
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(tidytext)
+# Divide the pandemic period into waves
+dat <- dat |> 
+  mutate(wave = case_when(
+    date >= as.Date("2020-01-20") & date <= as.Date("2020-06-30") ~ "Wave 1",  # Initial outbreak
+    # A sharp rise in death rates was observed, while reported cases remained low, 
+    # likely reflecting insufficient testing capacity at the time.
+    date >= as.Date("2020-07-01") & date <= as.Date("2021-05-30") ~ "Wave 2",  # first peak at 2020/12
+    date >= as.Date("2021-06-01") & date <= as.Date("2021-10-31") ~ "Wave 3",  # Delta variant, second peak at 2021/09
+    # The Delta variant was predominant during this period, with a marked increase in virulence.
+    date >= as.Date("2021-11-01") & date <= as.Date("2022-03-31") ~ "Wave 4",  # Omicron variant, third peak at 2022/01
+    # the Omicron wave saw the highest number of reported cases, but without a corresponding surge in hospitalizations and deaths,
+    # indicating higher transmissibility but lower virulence.
+    date >= as.Date("2022-04-01") & date <= as.Date("2023-05-11") ~ "Wave 5",  # Omicron subvariants (e.g.BQ.1, XBB),a small peak at 2022/12
+    TRUE ~ NA_character_
+  ))
+
+death_summary <- dat |> 
+  filter(!is.na(wave)) |> 
+  group_by(state, wave, region) |> 
+  summarise(total_deaths = sum(deaths, na.rm = TRUE),
+            total_pop = mean(pop, na.rm = TRUE),
+            death_rate = total_deaths / total_pop * 100000,
+            .groups = "drop")
+
+ggplot(death_summary, aes(x = reorder_within(state, death_rate, wave), 
+                          y = death_rate, fill = region)) +
+  geom_col() +
+  facet_wrap(~wave, scales = "free_y") +
+  coord_flip() +
+  scale_x_reordered() + 
+  labs(title = "COVID-19 Death Rate per 100,000 by State and Wave",
+       x = "State", y = "Death Rate (per 100,000)") +
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 3)) 
+
+```
+
 
 
 ### LME Models
