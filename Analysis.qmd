@@ -5,8 +5,7 @@ format: html
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext, usmap, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr)
-
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext)
 ```
 
 
@@ -17,317 +16,56 @@ dat = dat |>
 ```
 
 ### Exploration Data Analysis
-### show the regions and states on the US map
+### Standardize region labels and colors
 ```{r}
 dat |> 
   distinct(region, state) |> 
   group_by(region) |> 
-  summarise(states = paste(sort(state), collapse = ", "))
+  summarise(states = paste(sort(state), collapse = ", ")) 
 ```
-```{r}
-region_df <- tibble::tribble(
-  ~state, ~region,
-  "CT", 1, "MA", 1, "ME", 1, "NH", 1, "RI", 1, "VT", 1,
-  "NJ", 2, "NY", 2, "PR", 2,
-  "DC", 3, "DE", 3, "MD", 3, "PA", 3, "VA", 3, "WV", 3,
-  "AL", 4, "FL", 4, "GA", 4, "KY", 4, "MS", 4, "NC", 4, "SC", 4, "TN", 4,
-  "IL", 5, "IN", 5, "MI", 5, "MN", 5, "OH", 5, "WI", 5,
-  "AR", 6, "LA", 6, "NM", 6, "OK", 6, "TX", 6,
-  "IA", 7, "KS", 7, "MO", 7, "NE", 7,
-  "CO", 8, "MT", 8, "ND", 8, "SD", 8, "UT", 8, "WY", 8,
-  "AZ", 9, "CA", 9, "HI", 9, "NV", 9,
-  "AK",10, "ID",10, "OR",10, "WA",10
-) |> 
-  mutate(region = as.factor(region)) 
 
-region_colors <- c(
-  "#d95f02", # 1
-  "#bf812d", # 2
-  "#80b1d3", # 3
-  "#5ab4ac", # 4
-  "#1b9e77", # 5
-  "#66c2a5", # 6
-  "#3288bd", # 7
-  "#984ea3", # 8
-  "#e78ac3", # 9
-  "#f781bf"  # 10
+```{r}
+region_labels <- c(
+  "New England", "Tri-State", "Mid-Atlantic", "Southeast",
+  "Great Lakes", "South Central", "Plains",
+  "Mountain", "West Coast", "Pacific NW"
 )
-plot_usmap(data = region_df, values = "region", color = "white") +
-  scale_fill_manual(values = region_colors, name = "Region") +
+
+dat <- dat |>
+  mutate(region = factor(region, levels = 1:10, labels = region_labels))
+
+region_colors_named <- c(
+  "New England" = "#d95f02",
+  "Tri-State" = "#bf812d",
+  "Mid-Atlantic" = "#80b1d3",
+  "Southeast" = "#5ab4ac",
+  "Great Lakes" = "#1b9e77",
+  "South Central" = "#66c2a5",
+  "Plains" = "#3288bd",
+  "Mountain" = "#984ea3",
+  "West Coast" = "#e78ac3",
+  "Pacific NW" = "#f781bf"
+)
+```
+
+### show the regions and states on the US map
+```{r}
+
+plot_usmap(data = dat, values = "region", color = "white") +
+  scale_fill_manual(values = region_colors_named, name = "Region") +
   theme_classic() +
   ggtitle("Regional Map of the US")
-
-```
-
-```{r}
-## Animated US Map of Monthly COVID-19 Death Rates by State (2020–2023)
-
-dat <- dat |> 
-  mutate(death_rate = deaths / population * 100000)
-
-dat_monthly <- dat |> 
-  mutate(date_month = floor_date(date, "month")) |>
-  group_by(state, date_month) |>
-  summarise(death_rate = mean(death_rate, na.rm = TRUE), .groups = "drop")
-
-p <- plot_usmap(data = dat_monthly, values = "death_rate", regions = "states") +
-  scale_fill_gradient(low = "white", high = "red", name = "Deaths per 100K") +
-  labs(
-    title = "Monthly COVID-19 Death Rate by State",
-    subtitle = "{format(frame_time, '%B %Y')}",
-    caption = "Source: CDC",
-    fill = "Death Rate"
-  ) +
-  theme_void(base_size = 13) +
-  theme(legend.position = "right") +
-  transition_time(date_month) +
-  ease_aes("linear")
-
-anim_obj <- animate(p, width = 1000, height = 700, fps = 5, renderer = gifski_renderer())
-
-anim_save("us_death_rate.gif", animation = anim_obj)
 ```
 
 ###Describe if COVID-19 became less or more virulent across the different periods.(Analysis from pset4)
 
 Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
 ```{r}
-#COVID-19 Trends in the United States (2020–2023)
-library(ggplot2)
-library(tidyverse)
-library(viridis)
-library(scales)
-
-us_national_trend <- dat |> 
-  group_by(date) |>
-  summarise(
-    pop = sum(pop, na.rm = TRUE),
-    cases = sum(cases, na.rm = TRUE),
-    deaths = sum(deaths, na.rm = TRUE),
-    hosp = sum(hosp, na.rm = TRUE)
-  ) |> 
-  pivot_longer(cols = c(cases, deaths, hosp), names_to = "outcome", values_to = "count") |>
-  mutate(rate = count / pop * 100000)
-
-
-ggplot(us_national_trend, aes(x = date, y = rate, color = outcome)) +
-  geom_line(linewidth = 1) +
-  scale_color_manual(values = c("cases" = "#1f77b4", "deaths" = "#d62728", "hosp" = "#2ca02c")) +
-  facet_wrap(~ outcome, ncol = 1, scales = "free_y") +
-  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
-  labs(
-    title = "COVID-19 Trends in the United States (2020–2023)",
-    subtitle = "National rates per 100,000 population: cases, deaths, hospitalizations",
-    x = "Date",
-    y = "Rate per 100,000",
-    color = "Outcome",
-    caption = "Source: CDC, US Census"
-  ) +
-  theme_classic(base_size = 13) +
-  theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 9),
-    legend.position = "none"
-  )
-
-#COVID-19 US Trends by State and Region (2020–2023)
-dat$region_name <- factor(dat$region_name)
 dat |> 
-  pivot_longer(c(cases, deaths, hosp), names_to = "outcome", values_to = "rate") |> 
-  mutate(rate = rate / pop * 100000) |> 
-  ggplot(aes(x = date, y = rate, group = state, color = region_name)) +
-  geom_line(alpha = 0.7, linewidth = 0.5) +  
-  facet_wrap(~outcome, ncol = 1, scales = "free_y") +
-  scale_color_viridis_d(option = "C", end = 0.9) + 
-  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
-  labs(
-    title = "COVID-19 US Trends by State and Region (2020–2023)",
-    subtitle = "Rates per 100,000 population: cases, deaths, and hospitalizations",
-    x = "Date",
-    y = "Rate per 100,000",
-    color = "Region",
-    caption = "Source: CDC, US Census"
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 9),
-    legend.position = "right"
-  )
-```
-
-
-```{r}
-
-
-dat_eda = dat |> 
-  mutate(
-    death_rate = deaths / pop * 1e5,
-    case_rate = cases / pop * 1e5,
-    hosp_rate = hosp / pop * 1e5,
-    vax_rate = series / pop * 1e2,  # percent fully vaccinated
-    booster_rate = booster / pop * 1e2  # percent boosted
-  )
-
-dat_eda = dat_eda |> 
-  group_by(state) |> 
-  arrange(date) |> 
-  mutate(
-    case_rate_lag2 = lag(case_rate, 2),
-    hosp_rate_lag2 = lag(hosp_rate, 2)
-  ) |> 
-  ungroup()
-
-dat_nofirst2_eda = dat_eda |>
-  filter(!is.na(case_rate_lag2), !is.na(hosp_rate_lag2))
-
-# 2D Histogram: Death Rate vs Predictors (No Lag)
-dat_eda |> 
-  select(death_rate, case_rate, hosp_rate, vax_rate, booster_rate) |>
-  pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
-  ggplot(aes(x = value, y = death_rate)) +
-  geom_bin2d(bins = 80) +  
-  facet_wrap(~ predictor, scales = "free_x") +
-  scale_fill_viridis_c(option = "C") +
-  labs(
-    title = "2D Histogram: Death Rate vs Predictors (No Lag)",
-    x = "Predictor Value",
-    y = "Death Rate (per 100,000)"
-  ) +
-  theme_minimal()
-
-# 2D Histogram: Death Rate vs Predictors (With Lagged Variables)
-dat_nofirst2_eda |> 
-  select(death_rate, case_rate_lag2, hosp_rate_lag2, vax_rate, booster_rate) |>
-  pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
-  ggplot(aes(x = value, y = death_rate)) +
-  geom_bin2d(bins = 80) +  
-  facet_wrap(~ predictor, scales = "free_x") +
-  scale_fill_viridis_c(option = "C") +
-  labs(
-    title = "2D Histogram: Death Rate vs Predictors",
-    x = "Predictor Value",
-    y = "Death Rate (per 100,000)"
-  ) +
-  theme_minimal()
-
-# Pairwise Plot: Death Rate vs Predictors (No Lag) using GGally::ggpairs
-dat_nofirst2_eda |> 
-  select(death_rate, case_rate, hosp_rate, vax_rate, booster_rate) |>
-  GGally::ggpairs()
-
-# Pairwise Plot: Death Rate vs Predictors (With Lagged Variables) using GGally::ggpairs
-dat_nofirst2_eda |> 
-  select(death_rate, case_rate_lag2, hosp_rate_lag2, vax_rate, booster_rate) |>
-  GGally::ggpairs()
-```
-
-
-```{r}
-#vaccination
-
-
-# Heatmap of Vaccination Rate by State and Month (States Sorted by Average Vaccination Rate)
-state_vax_avg <- dat_nofirst2 |>
-  group_by(state) |>
-  summarise(vax_avg = mean(vax_rate, na.rm = TRUE))
-
-dat_nofirst2_eda |>
-  mutate(month = floor_date(date, "month")) |>
-  left_join(state_vax_avg, by = "state") |>  
-  mutate(state = fct_reorder(state, vax_avg)) |>  
-  group_by(state, month) |>
-  summarise(
-    death_rate = mean(death_rate, na.rm = TRUE),
-    vax_rate = mean(vax_rate, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  ggplot(aes(x = month, y = state, fill = vax_rate)) +
-  geom_tile(color = "white") +
-  scale_fill_viridis_c(name = "Vax Rate") +
-  labs(
-    title = "Vaccination Rate Heatmap by State and Month",
-    x = "Month", y = "State (sorted by avg. Vax Rate)"
-  ) +
-  theme_minimal()
-
-# Heatmap of Booster Rate by State and Month (States Sorted by Average Booster Rate)
-state_booster_avg <- dat_nofirst2_eda |>
-  group_by(state) |>
-  summarise(booster_avg = mean(booster_rate, na.rm = TRUE))
-
-dat_nofirst2_eda |>
-  mutate(month = floor_date(date, "month")) |>
-  left_join(state_booster_avg, by = "state") |>
-  mutate(state = fct_reorder(state, booster_avg)) |>
-  group_by(state, month) |>
-  summarise(
-    booster_rate = mean(booster_rate, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  ggplot(aes(x = month, y = state, fill = booster_rate)) +
-  geom_tile(color = "white") +
-  scale_fill_viridis_c(name = "Booster Rate") +
-  labs(
-    title = "Booster Vaccination Rate Heatmap by State and Month",
-    x = "Month", y = "State (sorted by avg. Booster Rate)"
-  ) +
-  theme_minimal()
-
-# Heatmap of Vaccination Rate by State, Month, and Region (Faceted by Region)
-state_vax_avg <- dat_nofirst2_eda |>
-  group_by(state) |>
-  summarise(vax_avg = mean(vax_rate, na.rm = TRUE))
-
-dat_nofirst2_eda |>
-  mutate(month = floor_date(date, "month")) |>
-  left_join(state_vax_avg, by = "state") |>
-  mutate(state = fct_reorder(state, vax_avg)) |>
-  group_by(state, month, region_name) |>
-  summarise(
-    vax_rate = mean(vax_rate, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  ggplot(aes(x = month, y = state, fill = vax_rate)) +
-  geom_tile(color = "white") +
-  scale_fill_viridis_c(name = "Vax Rate") +
-  labs(
-    title = "Vaccination Rate Heatmap by State and Month",
-    x = "Month", y = "State"
-  ) +
-  facet_wrap(~ region_name, scales = "free_y") +
-  theme_minimal(base_size = 12)
-
-# Scatter Plot of Death Rate vs Vaccination and Booster Rates (with LOESS Smoothing)
-dat_nofirst2_eda |> 
-  select(date, state, death_rate, vax_rate, booster_rate) |> 
-  pivot_longer(cols = c(vax_rate, booster_rate), names_to = "type", values_to = "rate") |>
-  ggplot(aes(x = rate, y = death_rate)) +
-  geom_point(alpha = 0.3) +
-  geom_smooth(method = "loess", se = FALSE, color = "blue") +
-  facet_wrap(~type, scales = "free_x") +
-  labs(
-    title = "Relationship Between Vaccination Rates and Death Rate",
-    x = "Vaccination / Booster Rate (%)",
-    y = "Death Rate (per 100,000)"
-  ) +
-  theme_minimal()
-
-# Bar Plot of Average Death Rate by Vaccination Rate Group
-dat_nofirst2_eda |>
-  mutate(
-    vax_group = cut(vax_rate, breaks = c(0, 25, 50, 75, 100), include.lowest = TRUE),
-    booster_group = cut(booster_rate, breaks = c(0, 25, 50, 75, 100), include.lowest = TRUE)
-  ) |>
-  group_by(vax_group) |>
-  summarise(mean_death = mean(death_rate, na.rm = TRUE)) |>
-  ggplot(aes(x = vax_group, y = mean_death)) +
-  geom_col(fill = "blue") +
-  labs(
-    title = "Average Death Rate by Vaccination Group",
-    x = "Vaccination Rate Group (%)",
-    y = "Mean Death Rate (per 100,000)"
-  ) +
-  theme_minimal()
-
+  pivot_longer(c(cases, deaths, hosp), names_to = "outcome",values_to = "rate") |> 
+  mutate(rate = rate / pop * 100000) |>
+  ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + 
+  facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()
 ```
 
 
@@ -381,6 +119,57 @@ p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
 print(p)
 ```
 
+### Vaccination(series) vs death rate in wave2 (2020/07/01-2021/05/30)
+```{r}
+dat_wave2 <- dat |>
+  filter(date >= as.Date("2020-07-01") & date <= as.Date("2021-05-30")) |>
+  mutate(death_rate = deaths / pop * 100000) |>
+  group_by(region, state) |>
+  summarise(
+    vax_rate = max(series, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
+    mean_death_rate = mean(death_rate, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
+  geom_point(alpha = 0.8, size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
+  ggrepel::geom_text_repel(size = 3) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Series Uptake vs. Average Death Rate in Wave 2 (2020-07 to 2021-05)",
+    subtitle = "Alpha variant period — boosters began rolling out",
+    x = "Vaccination Rate by End of Wave (%)",
+    y = "Average Death Rate (per 100k)",
+    color = "Region"
+  )
+```
+### Vaccination(booster) vs death rate in wave3 (2021/06/01-2021/10/31)
+
+```{r}
+dat_wave3 <- dat |>
+  filter(date >= as.Date("2021-06-01") & date <= as.Date("2021-10-31")) |>
+   mutate(death_rate = deaths / pop * 100000) |>
+  group_by(region, state) |>
+  summarise(
+    booster_rate = max(booster, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
+    mean_death_rate = mean(death_rate, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(dat_wave3, aes(x = booster_rate, y = mean_death_rate, label = state, color = region)) +
+  geom_point(alpha = 0.8, size = 3) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +
+  ggrepel::geom_text_repel(size = 3) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Booster Uptake vs. Average Death Rate in Wave 3 (2021-06 to 2021-10)",
+    subtitle = "Delta variant period — boosters began rolling out",
+    x = "Booster Rate by End of Wave (%)",
+    y = "Average Death Rate (per 100k)",
+    color = "Region"
+  )
+```
 
 ### LME Models
 
