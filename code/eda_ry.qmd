@@ -13,17 +13,15 @@ library(lubridate)
 library(transformr)
 
 
-# 添加死亡率
 dat <- dat |> 
   mutate(death_rate = deaths / population * 100000)
 
-# 转为每月第一天为单位（方便动画帧控制）
 dat_monthly <- dat |> 
   mutate(date_month = floor_date(date, "month")) |>
   group_by(state, date_month) |>
   summarise(death_rate = mean(death_rate, na.rm = TRUE), .groups = "drop")
 
-# 动态地图绘图对象
+
 p <- plot_usmap(data = dat_monthly, values = "death_rate", regions = "states") +
   scale_fill_gradient(low = "white", high = "red", name = "Deaths per 100K") +
   labs(
@@ -37,10 +35,10 @@ p <- plot_usmap(data = dat_monthly, values = "death_rate", regions = "states") +
   transition_time(date_month) +
   ease_aes("linear")
 
-# 使用 gifski 渲染器渲染动画
+
 anim_obj <- animate(p, width = 1000, height = 700, fps = 5, renderer = gifski_renderer())
 
-# 保存 GIF
+
 anim_save("us_death_rate.gif", animation = anim_obj)
 ```
 
@@ -48,20 +46,18 @@ anim_save("us_death_rate.gif", animation = anim_obj)
 
 ```{r}
 library(ggplot2)
-library(viridis)  # 也可以使用 viridis 色板
+library(viridis)  
 library(scales)
 
-# 确保 region_name 是 factor 且顺序合理
 dat$region_name <- factor(dat$region_name)
 
-# 绘图代码
 dat |> 
   pivot_longer(c(cases, deaths, hosp), names_to = "outcome", values_to = "rate") |> 
   mutate(rate = rate / pop * 100000) |> 
   ggplot(aes(x = date, y = rate, group = state, color = region_name)) +
-  geom_line(alpha = 0.7, linewidth = 0.5) +  # 增加线条粗细和透明度
+  geom_line(alpha = 0.7, linewidth = 0.5) + 
   facet_wrap(~outcome, ncol = 1, scales = "free_y") +
-  scale_color_viridis_d(option = "C", end = 0.9) +  # 使用高对比的色板
+  scale_color_viridis_d(option = "C", end = 0.9) +  
   scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
   labs(
     title = "COVID-19 US Trends by State and Region (2020–2023)",
@@ -84,7 +80,6 @@ library(tidyverse)
 library(viridis)
 library(scales)
 
-# 聚合全国数据：按每周合并所有州
 us_national_trend <- dat |> 
   group_by(date) |>
   summarise(
@@ -96,7 +91,7 @@ us_national_trend <- dat |>
   pivot_longer(cols = c(cases, deaths, hosp), names_to = "outcome", values_to = "count") |>
   mutate(rate = count / pop * 100000)
 
-# 绘图：全国趋势
+
 ggplot(us_national_trend, aes(x = date, y = rate, color = outcome)) +
   geom_line(linewidth = 1) +
   scale_color_manual(values = c("cases" = "#1f77b4", "deaths" = "#d62728", "hosp" = "#2ca02c")) +
@@ -122,12 +117,11 @@ library(ggplot2)
 library(tidyr)
 library(dplyr)
 
-
 dat |> 
   select(death_rate, case_rate, hosp_rate, vax_rate, booster_rate) |>
   pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
   ggplot(aes(x = value, y = death_rate)) +
-  geom_bin2d(bins = 80) +  # 控制颜色格子数量
+  geom_bin2d(bins = 80) +  
   facet_wrap(~ predictor, scales = "free_x") +
   scale_fill_viridis_c(option = "C") +
   labs(
@@ -141,7 +135,7 @@ dat_nofirst2 |>
   select(death_rate, case_rate_lag2, hosp_rate_lag2, vax_rate, booster_rate) |>
   pivot_longer(cols = -death_rate, names_to = "predictor", values_to = "value") |>
   ggplot(aes(x = value, y = death_rate)) +
-  geom_bin2d(bins = 80) +  # 控制颜色格子数量
+  geom_bin2d(bins = 80) +  
   facet_wrap(~ predictor, scales = "free_x") +
   scale_fill_viridis_c(option = "C") +
   labs(
@@ -206,6 +200,93 @@ dat_nofirst2 |>
   theme_minimal()
 
 ```
+
+```{r}
+library(lubridate)
+library(forcats) 
+
+state_vax_avg <- dat_nofirst2 |>
+  group_by(state) |>
+  summarise(vax_avg = mean(vax_rate, na.rm = TRUE))
+
+dat_nofirst2 |>
+  mutate(month = floor_date(date, "month")) |>
+  left_join(state_vax_avg, by = "state") |>  
+  mutate(state = fct_reorder(state, vax_avg)) |>  
+  group_by(state, month) |>
+  summarise(
+    death_rate = mean(death_rate, na.rm = TRUE),
+    vax_rate = mean(vax_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = month, y = state, fill = vax_rate)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(name = "Vax Rate") +
+  labs(
+    title = "Vaccination Rate Heatmap by State and Month",
+    x = "Month", y = "State (sorted by avg. Vax Rate)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+library(lubridate)
+library(forcats)
+library(tidyverse)
+
+state_booster_avg <- dat_nofirst2 |>
+  group_by(state) |>
+  summarise(booster_avg = mean(booster_rate, na.rm = TRUE))
+
+dat_nofirst2 |>
+  mutate(month = floor_date(date, "month")) |>
+  left_join(state_booster_avg, by = "state") |>
+  mutate(state = fct_reorder(state, booster_avg)) |>
+  group_by(state, month) |>
+  summarise(
+    booster_rate = mean(booster_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = month, y = state, fill = booster_rate)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(name = "Booster Rate") +
+  labs(
+    title = "Booster Vaccination Rate Heatmap by State and Month",
+    x = "Month", y = "State (sorted by avg. Booster Rate)"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+library(lubridate)
+library(forcats)
+library(tidyverse)
+
+
+state_vax_avg <- dat_nofirst2 |>
+  group_by(state) |>
+  summarise(vax_avg = mean(vax_rate, na.rm = TRUE))
+
+dat_nofirst2 |>
+  mutate(month = floor_date(date, "month")) |>
+  left_join(state_vax_avg, by = "state") |>
+  mutate(state = fct_reorder(state, vax_avg)) |>
+  group_by(state, month, region_name) |>
+  summarise(
+    vax_rate = mean(vax_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = month, y = state, fill = vax_rate)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis_c(name = "Vax Rate") +
+  labs(
+    title = "Vaccination Rate Heatmap by State and Month",
+    x = "Month", y = "State"
+  ) +
+  facet_wrap(~ region_name, scales = "free_y") +
+  theme_minimal(base_size = 12)
+```
+
 ```{r}
 library(tidyverse)
 
@@ -241,5 +322,16 @@ dat_nofirst2 |>
     y = "Mean Death Rate (per 100,000)"
   ) +
   theme_minimal()
+```
+
+```{r}
+#分wave 分疫苗
+start_date <- make_date(2021, 3, 1); end_date <- make_date(2021, 9, 1)
+dat |> filter(date >= start_date & date <= end_date) |>
+  mutate(death_rate = deaths / pop * 100000, vax_rate = series / pop * 100) |>
+  group_by(state) |> summarize(death_rate = sum(death_rate, na.rm = TRUE), 
+                               vax_rate = max(vax_rate)) |>
+  ggplot(aes(vax_rate, death_rate, label = state)) + geom_point() + 
+  geom_label() + theme_classic() 
 ```
 
