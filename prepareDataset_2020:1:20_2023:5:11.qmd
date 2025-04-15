@@ -34,6 +34,14 @@ hosp_raw <- hosp_raw |> select(jurisdiction, collection_date, hosp = new_covid_1
   group_by(jurisdiction, week, year) |>
   summarise(hosp = sum(hosp))  |> ungroup()
 
+deaths_raw <- deaths_raw |>
+  mutate(
+    year = case_when(
+      year == "2020/2021" ~ "2020",  
+      year == "2021/2022" ~ "2021",  
+      TRUE ~ year
+  ))
+
 deaths_raw <- deaths_raw |> select(state, year, week = mmwr_week, deaths = covid_19_deaths) |>
   mutate(year = case_when(str_detect(year, '/') ~ 
            str_extract(year, "(?<=/)[0-9]+"), # if year contains /, e.g. 2019/2020, then only keep after the /
@@ -56,6 +64,8 @@ all_dates <- data.frame(date = seq(make_date(2020, 1, 20),
 
 dates_and_pop <- cross_join(all_dates, data.frame(state = unique(population$state))) |> left_join(population, by = c("state", "mmwr_year" = "year"))
 ```
+
+
 
 ```{r}
 dat <- dates_and_pop |> left_join(cases_raw,
@@ -82,8 +92,4 @@ dat <- dat |> left_join(deaths_raw,
 dat <- dat |> arrange(state, date)
 save(dat, file = "./data/dat.rda")
 ```
-
-
-
-
 
