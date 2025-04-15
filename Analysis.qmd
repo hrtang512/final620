@@ -5,7 +5,7 @@ format: html
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext, usmap, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr)
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext, usmap, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr,zoo)
 ```
 
 
@@ -50,11 +50,11 @@ region_colors_named <- c(
 
 ### show the regions and states on the US map
 ```{r}
-
 plot_usmap(data = dat, values = "region", color = "white") +
   scale_fill_manual(values = region_colors_named, name = "Region") +
   theme_classic() +
   ggtitle("Regional Map of the US")
+
 ```
 
 ```{r}
@@ -97,6 +97,81 @@ dat |>
   ggplot(aes(date, rate, group = state, color = region)) + geom_line(alpha = 0.25) + 
   facet_wrap(~outcome, ncol = 1, scales = 'free_y') + theme_classic()
 ```
+
+### COVID-19 waves were automatically identified by combining smoothed case trajectories with relative week-over-week growth rates.
+### Highlighted by Start-to-Next-Start Intervals
+```{r}
+dat_us <- dat |>
+  group_by(date) |>
+  summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop") |>
+  arrange(date) |>
+  mutate(
+    cases_smooth = rollmean(cases, k = 7, fill = NA, align = "center"),
+    pct_change = (cases_smooth - lag(cases_smooth)) / lag(cases_smooth),
+    high_growth = ifelse(pct_change > 0.10, 1, 0)
+  )
+
+label_waves <- function(x) {
+  r <- rle(x)
+  wave_id <- rep(NA, length(x))
+  counter <- 1
+  idx <- 1
+  for (i in seq_along(r$lengths)) {
+    if (r$values[i] == 1 && r$lengths[i] >= 2) {
+      wave_id[idx:(idx + r$lengths[i] - 1)] <- counter
+      counter <- counter + 1
+    }
+    idx <- idx + r$lengths[i]
+  }
+  return(wave_id)
+}
+
+dat_us <- dat_us |>
+  mutate(
+    wave = label_waves(high_growth)
+  )
+
+wave_starts <- dat_us |>
+  filter(!is.na(wave)) |>
+  group_by(wave) |>
+  summarise(start_date = min(date), .groups = "drop") |>
+  arrange(start_date)
+
+wave_rects <- wave_starts |>
+  mutate(
+    label = format(start_date, "%b %d, %Y"),
+    end_date = lead(start_date) - 1
+  )
+
+wave_rects$label <- factor(wave_rects$label, levels = wave_rects$label)
+
+last_date <- max(dat_us$date, na.rm = TRUE)
+wave_rects$end_date[nrow(wave_rects)] <- last_date
+
+ggplot(dat_us, aes(x = date, y = cases_smooth)) +
+  geom_rect(data = wave_rects,
+            aes(xmin = start_date, xmax = end_date, ymin = -Inf, ymax = Inf, 
+                fill = label),
+            alpha = 0.15, inherit.aes = FALSE) +
+  geom_line(color = "black") +
+  geom_point(aes(color = as.factor(wave)), size = 1.5, alpha = 0.6) +
+  scale_color_viridis_d(option = "D", na.translate = FALSE) +
+  scale_fill_brewer(palette = "Set2", name = "Wave Start Date") +
+  guides(color = "none") +
+  labs(
+    title = "COVID-19 Waves",
+    x = "Date", y = "Smoothed Cases"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+```
+
 ```{r}
 #COVID-19 Trends in the United States (2020–2023)
 library(ggplot2)
@@ -161,8 +236,6 @@ dat |>
 ```
 
 ```{r}
-
-
 dat_eda = dat |> 
   mutate(
     death_rate = deaths / pop * 1e5,
@@ -227,19 +300,15 @@ dat_nofirst2_eda |>
 
 ### Divide the pandemic period, 2020/01/20 to 2023/05/11(first confirmed case of COVID-19, to the end of the public health emergency) into waves. For each period compute the deaths rates by state. Describe which states did better or worse during the different periods.
 ```{r}
-# Divide the pandemic period into waves
+# Divide the pandemic period into waves (based on auto-detected wave_rects)
 dat <- dat |> 
   mutate(wave = case_when(
-    date >= as.Date("2020-01-20") & date <= as.Date("2020-06-30") ~ "Wave 1",  # Initial outbreak
-    # A sharp rise in death rates was observed, while reported cases remained low, 
-    # likely reflecting insufficient testing capacity at the time.
-    date >= as.Date("2020-07-01") & date <= as.Date("2021-05-30") ~ "Wave 2",  # first peak at 2020/12
-    date >= as.Date("2021-06-01") & date <= as.Date("2021-10-31") ~ "Wave 3",  # Delta variant, second peak at 2021/09
-    # The Delta variant was predominant during this period, with a marked increase in virulence.
-    date >= as.Date("2021-11-01") & date <= as.Date("2022-03-31") ~ "Wave 4",  # Omicron variant, third peak at 2022/01
-    # the Omicron wave saw the highest number of reported cases, but without a corresponding surge in hospitalizations and deaths,
-    # indicating higher transmissibility but lower virulence.
-    date >= as.Date("2022-04-01") & date <= as.Date("2023-05-11") ~ "Wave 5",  # Omicron subvariants (e.g.BQ.1, XBB),a small peak at 2022/12
+    date >= as.Date("2020-02-22") & date <= as.Date("2020-06-05") ~ "2020/02/22 - 2020/06/05",
+    date >= as.Date("2020-06-06") & date <= as.Date("2020-10-02") ~ "2020/06/06 - 2020/10/02",
+    date >= as.Date("2020-10-03") & date <= as.Date("2021-06-18") ~ "2020/10/03 - 2021/06/18",
+    date >= as.Date("2021-06-19") & date <= as.Date("2021-11-26") ~ "2021/06/19 - 2021/11/26",
+    date >= as.Date("2021-11-27") & date <= as.Date("2022-04-08") ~ "2021/11/27 - 2022/04/08",
+    date >= as.Date("2022-04-09") & date <= as.Date("2023-05-11") ~ "2022/04/09 - 2023/05/11",
     TRUE ~ NA_character_
   ))
 
@@ -260,8 +329,7 @@ ggplot(death_summary, aes(x = reorder_within(state, death_rate, wave),
   labs(title = "COVID-19 Death Rate per 100,000 by State and Wave",
        x = "State", y = "Death Rate (per 100,000)") +
   theme_minimal() +
-  theme(axis.text.y = element_text(size = 3)) 
-
+  theme(axis.text.y = element_text(size = 3))
 ```
 
 To determine when vaccination started and when most of the population was vaccinated, compute the percent of the US population (including DC and Puerto Rico) vaccinated by date. Do the same for the booster. Then plot both percentages. (Analysis from pset4)
@@ -329,10 +397,29 @@ ggplot(dat_wave3, aes(x = booster_rate, y = mean_death_rate, label = state, colo
 
 ```{r}
 #vaccination
+dat_eda = dat |> 
+  mutate(
+    death_rate = deaths / pop * 1e5,
+    case_rate = cases / pop * 1e5,
+    hosp_rate = hosp / pop * 1e5,
+    vax_rate = series / pop * 1e2,  # percent fully vaccinated
+    booster_rate = booster / pop * 1e2  # percent boosted
+  )
 
+dat_eda = dat_eda |> 
+  group_by(state) |> 
+  arrange(date) |> 
+  mutate(
+    case_rate_lag2 = lag(case_rate, 2),
+    hosp_rate_lag2 = lag(hosp_rate, 2)
+  ) |> 
+  ungroup()
+
+dat_nofirst2_eda = dat_eda |>
+  filter(!is.na(case_rate_lag2), !is.na(hosp_rate_lag2))
 
 # Heatmap of Vaccination Rate by State and Month (States Sorted by Average Vaccination Rate)
-state_vax_avg <- dat_nofirst2 |>
+state_vax_avg <- dat_nofirst2_eda |>
   group_by(state) |>
   summarise(vax_avg = mean(vax_rate, na.rm = TRUE))
 
@@ -552,7 +639,7 @@ data.frame(resid = resid(model_lag)) |>
   stat_qq_line(color = "blue") +
   theme_minimal() +
   labs(title = "Q-Q Plot of Residuals")
-```
+```data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAUCAYAAACnOeyiAAAAXklEQVR4XmNgAIL///8zMYSGhjIDGYIMIiIMvECGMwMDN4M4kFEDUqIIZKwDMdSBjAsghj6Q8QPEMAAy/lOBoQekv4AYKkDGfgZeXl4RICOLQUtLiw3IUAJJMQIZ7AC2tU2tJWCy/wAAAABJRU5ErkJggg==
 
 ### Excess death rate
 ```{r}
@@ -562,8 +649,8 @@ dat_excess = dat_nofirst2 |>
          excess_death_rate = death_rate - predicted_death_rate)
 
 # View a few rows
-head(dat_excess |> select(state, date, death_rate, predicted_death_rate, excess_death_rate))
-```
+head(dat_excess |> select(state, date, death_rate, predicted_death
+```_rate, excess_death_rate))
 
 ```{r}
 state_to_plot = "CA"
