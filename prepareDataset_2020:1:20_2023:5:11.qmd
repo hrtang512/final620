@@ -6,6 +6,8 @@ format: html
 ```{r}
 library(Matrix)
 library(tidyverse)
+library(jsonlite)
+library(httr2)
 load('data/population.rda')
 ```
 
