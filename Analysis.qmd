@@ -171,6 +171,106 @@ ggplot(dat_us, aes(x = date, y = cases_smooth)) +
     axis.ticks = element_line(color = "black")
   )
 ```
+library(forcats)
+library(ggplot2)
+library(tidyverse)
+library(viridis)
+library(scales)
+
+us_national_trend <- dat |> 
+  group_by(date) |>
+  summarise(
+    pop = sum(pop, na.rm = TRUE),
+    cases = sum(cases, na.rm = TRUE),
+    deaths = sum(deaths, na.rm = TRUE),
+    hosp = sum(hosp, na.rm = TRUE),
+    vax = sum(series, na.rm = TRUE),
+    booster = sum(booster, na.rm = TRUE)
+  ) |> 
+  mutate(
+    case_rate = cases / pop * 100000,
+    death_rate = deaths / pop * 100000,
+    hosp_rate = hosp / pop * 100000,
+    vax_rate = vax / pop * 100,
+    booster_rate = booster / pop * 100
+  ) |> 
+  pivot_longer(
+    cols = c(death_rate, vax_rate, booster_rate, case_rate, hosp_rate),
+    names_to = "metric", values_to = "rate"
+  ) |>
+  mutate(metric = factor(metric, levels = c(
+    "death_rate", "vax_rate", "booster_rate", "case_rate", "hosp_rate"
+  )))
+
+ggplot(us_national_trend, aes(x = date, y = rate, color = metric)) +
+  geom_line(linewidth = 1) +
+  scale_color_manual(
+    values = c(
+      "death_rate" = "#d62728",
+      "vax_rate" = "goldenrod",
+      "booster_rate" = "purple",
+      "case_rate" = "#1f77b4",
+      "hosp_rate" = "#2ca02c"
+    ),
+    labels = c(
+      "Deaths per 100,000", "Vaccination Rate (%)", "Booster Rate (%)",
+      "Cases per 100,000", "Hospitalizations per 100,000"
+    )
+  ) +
+  facet_wrap(~ metric, ncol = 1, scales = "free_y", labeller = as_labeller(c(
+    death_rate = "Deaths per 100,000",
+    vax_rate = "Vaccination Rate (%)",
+    booster_rate = "Booster Rate (%)",
+    case_rate = "Cases per 100,000",
+    hosp_rate = "Hospitalizations per 100,000"
+  ))) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
+  labs(
+    title = "COVID-19 and Vaccination Trends in the United States (2020–2023)",
+    x = "Date", y = "Rate",
+    color = "",
+    caption = "Source: CDC, US Census"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(axis.text.x = element_text(size = 9))
+
+#us trend with vaccination and booster
+dat$region_name <- factor(dat$region_name)
+
+outcome_levels <- c("Deaths", "Vaccination Rate (%)", "Booster Rate (%)", "Cases", "Hospitalizations")
+
+dat |>
+  pivot_longer(c(cases, deaths, hosp, series, booster), names_to = "outcome", values_to = "value") |>
+  mutate(
+    rate = case_when(
+      outcome %in% c("series", "booster") ~ value / pop * 100,
+      TRUE ~ value / pop * 100000
+    ),
+    outcome = recode(outcome,
+                     deaths = "Deaths",
+                     series = "Vaccination Rate (%)",
+                     booster = "Booster Rate (%)",
+                     cases = "Cases",
+                     hosp = "Hospitalizations"),
+    outcome = factor(outcome, levels = outcome_levels)
+  ) |>
+  ggplot(aes(x = date, y = rate, group = state, color = region_name)) +
+  geom_line(alpha = 0.7, linewidth = 0.5) +
+  facet_wrap(~outcome, ncol = 1, scales = "free_y") +
+  scale_color_viridis_d(option = "C", end = 0.9) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
+  labs(
+    title = "COVID-19 and Vaccination Trends by State and Region (2020–2023)",
+    subtitle = "Rates per 100,000 population (vaccination/booster shown as %)",
+    x = "Date", y = "Rate",
+    color = "Region",
+    caption = "Source: CDC, US Census"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x = element_text(size = 9),
+    strip.text = element_text(face = "bold")
+  )
 
 ```{r}
 #COVID-19 Trends in the United States (2020–2023)
