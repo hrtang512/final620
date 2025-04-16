@@ -3,7 +3,7 @@ library(tidyverse)
 library(janitor)
 
 # https://www.census.gov/data/tables/time-series/demo/popest/2020s-national-total.html
-pop_raw <- read_excel("data/NST-EST2024-POP.xlsx", skip = 3) |>
+pop_raw <- read_excel("../data/NST-EST2024-POP.xlsx", skip = 3) |>
   clean_names() 
 
 pop_raw <- pop_raw |>
@@ -48,4 +48,4 @@ regions = fromJSON(url, simplifyDataFrame = T) |>
 population <- population |>
   left_join(regions, by = "state_name")
 
-save(population, file = "./data/population.rda")
+save(population, file = "../data/population.rda")
