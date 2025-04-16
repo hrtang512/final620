@@ -49,7 +49,7 @@ region_colors_named <- c(
 ```
 
 ### show the regions and states on the US map
-```{r}
+```{r USmap}
 plot_usmap(data = dat, values = "region", color = "white") +
   scale_fill_manual(values = region_colors_named, name = "Region") +
   theme_classic() +
@@ -57,7 +57,7 @@ plot_usmap(data = dat, values = "region", color = "white") +
 
 ```
 
-```{r}
+```{r gif_animation, eval=FALSE}
 ## Animated US Map of Monthly COVID-19 Death Rates by State (2020–2023)
 
 dat <- dat |> 
@@ -90,7 +90,7 @@ anim_save("us_death_rate.gif", animation = anim_obj)
 ###Describe if COVID-19 became less or more virulent across the different periods.(Analysis from pset4)
 
 Plot a trend plot for cases, hospitalizations and deaths for each state. Color by region. Plot rates per $100,000$ people. Place the plots on top of each other. Hint: Use `pivot_longer` and `facet_wrap`.
-```{r}
+```{r trend_plot_for_cases_hosp_deaths}
 dat |> 
   pivot_longer(c(cases, deaths, hosp), names_to = "outcome",values_to = "rate") |> 
   mutate(rate = rate / pop * 100000) |>
@@ -100,14 +100,14 @@ dat |>
 
 ### COVID-19 waves were automatically identified by combining smoothed case trajectories with relative week-over-week growth rates.
 ### Highlighted by Start-to-Next-Start Intervals
-```{r}
+```{r death_wave_Identification, fig.width = 16, fig.height = 6, message=FALSE, warning=FALSE}
 dat_us <- dat |>
   group_by(date) |>
-  summarise(cases = sum(cases, na.rm = TRUE), .groups = "drop") |>
+  summarise(deaths = sum(deaths, na.rm = TRUE), .groups = "drop") |>
   arrange(date) |>
   mutate(
-    cases_smooth = rollmean(cases, k = 7, fill = NA, align = "center"),
-    pct_change = (cases_smooth - lag(cases_smooth)) / lag(cases_smooth),
+    deaths_smooth = rollmean(deaths, k = 7, fill = NA, align = "center"),
+    pct_change = (deaths_smooth - lag(deaths_smooth)) / lag(deaths_smooth),
     high_growth = ifelse(pct_change > 0.10, 1, 0)
   )
 
@@ -148,7 +148,7 @@ wave_rects$label <- factor(wave_rects$label, levels = wave_rects$label)
 last_date <- max(dat_us$date, na.rm = TRUE)
 wave_rects$end_date[nrow(wave_rects)] <- last_date
 
-ggplot(dat_us, aes(x = date, y = cases_smooth)) +
+ggplot(dat_us, aes(x = date, y = deaths_smooth)) +
   geom_rect(data = wave_rects,
             aes(xmin = start_date, xmax = end_date, ymin = -Inf, ymax = Inf, 
                 fill = label),
@@ -156,11 +156,11 @@ ggplot(dat_us, aes(x = date, y = cases_smooth)) +
   geom_line(color = "black") +
   geom_point(aes(color = as.factor(wave)), size = 1.5, alpha = 0.6) +
   scale_color_viridis_d(option = "D", na.translate = FALSE) +
-  scale_fill_brewer(palette = "Set2", name = "Wave Start Date") +
+  scale_fill_brewer(name = "Wave Start Date") +
   guides(color = "none") +
   labs(
     title = "COVID-19 Waves",
-    x = "Date", y = "Smoothed Cases"
+    x = "Date", y = "Smoothed deaths"
   ) +
   theme_minimal(base_size = 14) +
   theme(
@@ -171,106 +171,88 @@ ggplot(dat_us, aes(x = date, y = cases_smooth)) +
     axis.ticks = element_line(color = "black")
   )
 ```
-library(forcats)
-library(ggplot2)
-library(tidyverse)
-library(viridis)
-library(scales)
-
-us_national_trend <- dat |> 
+```{r wave_plot_with_standardized_trends, fig.width = 16, fig.height = 6, message=FALSE, warning=FALSE}
+dat_us <- dat |>
   group_by(date) |>
   summarise(
-    pop = sum(pop, na.rm = TRUE),
     cases = sum(cases, na.rm = TRUE),
-    deaths = sum(deaths, na.rm = TRUE),
     hosp = sum(hosp, na.rm = TRUE),
-    vax = sum(series, na.rm = TRUE),
-    booster = sum(booster, na.rm = TRUE)
-  ) |> 
-  mutate(
-    case_rate = cases / pop * 100000,
-    death_rate = deaths / pop * 100000,
-    hosp_rate = hosp / pop * 100000,
-    vax_rate = vax / pop * 100,
-    booster_rate = booster / pop * 100
-  ) |> 
-  pivot_longer(
-    cols = c(death_rate, vax_rate, booster_rate, case_rate, hosp_rate),
-    names_to = "metric", values_to = "rate"
+    deaths = sum(deaths, na.rm = TRUE),
+    .groups = "drop"
   ) |>
-  mutate(metric = factor(metric, levels = c(
-    "death_rate", "vax_rate", "booster_rate", "case_rate", "hosp_rate"
-  )))
-
-ggplot(us_national_trend, aes(x = date, y = rate, color = metric)) +
-  geom_line(linewidth = 1) +
-  scale_color_manual(
-    values = c(
-      "death_rate" = "#d62728",
-      "vax_rate" = "goldenrod",
-      "booster_rate" = "purple",
-      "case_rate" = "#1f77b4",
-      "hosp_rate" = "#2ca02c"
-    ),
-    labels = c(
-      "Deaths per 100,000", "Vaccination Rate (%)", "Booster Rate (%)",
-      "Cases per 100,000", "Hospitalizations per 100,000"
-    )
-  ) +
-  facet_wrap(~ metric, ncol = 1, scales = "free_y", labeller = as_labeller(c(
-    death_rate = "Deaths per 100,000",
-    vax_rate = "Vaccination Rate (%)",
-    booster_rate = "Booster Rate (%)",
-    case_rate = "Cases per 100,000",
-    hosp_rate = "Hospitalizations per 100,000"
-  ))) +
-  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
-  labs(
-    title = "COVID-19 and Vaccination Trends in the United States (2020–2023)",
-    x = "Date", y = "Rate",
-    color = "",
-    caption = "Source: CDC, US Census"
-  ) +
-  theme_classic(base_size = 13) +
-  theme(axis.text.x = element_text(size = 9))
-
-#us trend with vaccination and booster
-dat$region_name <- factor(dat$region_name)
-
-outcome_levels <- c("Deaths", "Vaccination Rate (%)", "Booster Rate (%)", "Cases", "Hospitalizations")
-
-dat |>
-  pivot_longer(c(cases, deaths, hosp, series, booster), names_to = "outcome", values_to = "value") |>
+  arrange(date) |>
   mutate(
-    rate = case_when(
-      outcome %in% c("series", "booster") ~ value / pop * 100,
-      TRUE ~ value / pop * 100000
-    ),
-    outcome = recode(outcome,
-                     deaths = "Deaths",
-                     series = "Vaccination Rate (%)",
-                     booster = "Booster Rate (%)",
-                     cases = "Cases",
-                     hosp = "Hospitalizations"),
-    outcome = factor(outcome, levels = outcome_levels)
-  ) |>
-  ggplot(aes(x = date, y = rate, group = state, color = region_name)) +
-  geom_line(alpha = 0.7, linewidth = 0.5) +
-  facet_wrap(~outcome, ncol = 1, scales = "free_y") +
-  scale_color_viridis_d(option = "C", end = 0.9) +
-  scale_x_date(date_breaks = "3 months", date_labels = "%b\n%Y") +
-  labs(
-    title = "COVID-19 and Vaccination Trends by State and Region (2020–2023)",
-    subtitle = "Rates per 100,000 population (vaccination/booster shown as %)",
-    x = "Date", y = "Rate",
-    color = "Region",
-    caption = "Source: CDC, US Census"
-  ) +
-  theme_classic(base_size = 12) +
-  theme(
-    axis.text.x = element_text(size = 9),
-    strip.text = element_text(face = "bold")
+    cases_smooth = rollmean(cases, k = 7, fill = NA, align = "center"),
+    hosp_smooth = rollmean(hosp, k = 7, fill = NA, align = "center"),
+    deaths_smooth = rollmean(deaths, k = 7, fill = NA, align = "center"),
+
+    cases_std = cases_smooth / max(cases_smooth, na.rm = TRUE),
+    hosp_std = hosp_smooth / max(hosp_smooth, na.rm = TRUE),
+    deaths_std = deaths_smooth / max(deaths_smooth, na.rm = TRUE),
+
+    pct_change = (deaths_smooth - lag(deaths_smooth)) / lag(deaths_smooth),
+    high_growth = ifelse(pct_change > 0.10, 1, 0)
   )
+
+label_waves <- function(x) {
+  r <- rle(x)
+  wave_id <- rep(NA, length(x))
+  counter <- 1
+  idx <- 1
+  for (i in seq_along(r$lengths)) {
+    if (r$values[i] == 1 && r$lengths[i] >= 2) {
+      wave_id[idx:(idx + r$lengths[i] - 1)] <- counter
+      counter <- counter + 1
+    }
+    idx <- idx + r$lengths[i]
+  }
+  return(wave_id)
+}
+
+dat_us <- dat_us |>
+  mutate(wave = label_waves(high_growth))
+
+wave_starts <- dat_us |>
+  filter(!is.na(wave)) |>
+  group_by(wave) |>
+  summarise(start_date = min(date), .groups = "drop") |>
+  arrange(start_date)
+
+wave_rects <- wave_starts |>
+  mutate(
+    label = format(start_date, "%b %d, %Y"),
+    end_date = lead(start_date) - 1
+  )
+
+last_date <- max(dat_us$date, na.rm = TRUE)
+wave_rects$end_date[nrow(wave_rects)] <- last_date
+wave_rects$label <- factor(wave_rects$label, levels = wave_rects$label)
+
+ggplot(dat_us, aes(x = date)) +
+  geom_rect(data = wave_rects,
+            aes(xmin = start_date, xmax = end_date, ymin = -Inf, ymax = Inf, fill = label),
+            alpha = 0.15, inherit.aes = FALSE) +
+  geom_line(aes(y = cases_std, color = "Cases"), linewidth = 0.8) +
+  geom_line(aes(y = hosp_std, color = "Hospitalizations"), linewidth = 0.8) +
+  geom_line(aes(y = deaths_std, color = "Deaths"), linewidth = 1.2) +
+  scale_color_manual(values = c("Cases" = "blue", "Hospitalizations" = "orange", "Deaths" = "black")) +
+  scale_fill_brewer(name = "Wave Start Date") +
+  labs(
+    title = "COVID-19 Death Waves with Standardized Smoothed Trends",
+    x = "Date",
+    y = "Relative Level (Standardized 0–1)",
+    color = "Metric"
+  ) +
+  theme_minimal(base_size = 14) +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+```
 
 ```{r}
 #COVID-19 Trends in the United States (2020–2023)
@@ -399,18 +381,17 @@ dat_nofirst2_eda |>
 ```
 
 ### Divide the pandemic period, 2020/01/20 to 2023/05/11(first confirmed case of COVID-19, to the end of the public health emergency) into waves. For each period compute the deaths rates by state. Describe which states did better or worse during the different periods.
-```{r}
-# Divide the pandemic period into waves (based on auto-detected wave_rects)
+```{r wave_death_rate, fig.width = 16, fig.height = 6, message=FALSE, warning=FALSE}
+
+wave_rects_labeled <- wave_rects |>
+  select(wave_label = label, start_date, end_date)
+
+
 dat <- dat |> 
-  mutate(wave = case_when(
-    date >= as.Date("2020-02-22") & date <= as.Date("2020-06-05") ~ "2020/02/22 - 2020/06/05",
-    date >= as.Date("2020-06-06") & date <= as.Date("2020-10-02") ~ "2020/06/06 - 2020/10/02",
-    date >= as.Date("2020-10-03") & date <= as.Date("2021-06-18") ~ "2020/10/03 - 2021/06/18",
-    date >= as.Date("2021-06-19") & date <= as.Date("2021-11-26") ~ "2021/06/19 - 2021/11/26",
-    date >= as.Date("2021-11-27") & date <= as.Date("2022-04-08") ~ "2021/11/27 - 2022/04/08",
-    date >= as.Date("2022-04-09") & date <= as.Date("2023-05-11") ~ "2022/04/09 - 2023/05/11",
-    TRUE ~ NA_character_
-  ))
+  left_join(wave_rects_labeled, by = character()) |> 
+  filter(date >= start_date & date <= end_date) |> 
+  mutate(wave = wave_label) |> 
+  select(-start_date, -end_date, -wave_label)
 
 death_summary <- dat |> 
   filter(!is.na(wave)) |> 
@@ -423,10 +404,10 @@ death_summary <- dat |>
 ggplot(death_summary, aes(x = reorder_within(state, death_rate, wave), 
                           y = death_rate, fill = region)) +
   geom_col() +
-  facet_wrap(~wave, scales = "free_y") +
+  facet_wrap(~wave, scales = "free_y", nrow = 1) +
   coord_flip() +
   scale_x_reordered() + 
-  labs(title = "COVID-19 Death Rate per 100,000 by State and Wave",
+  labs(title = "COVID-19 Death Rate by State and Wave",
        x = "State", y = "Death Rate (per 100,000)") +
   theme_minimal() +
   theme(axis.text.y = element_text(size = 3))
@@ -445,8 +426,10 @@ print(p)
 
 ### Vaccination(series) vs death rate in wave2 (2020/07/01-2021/05/30)
 ```{r}
-dat_wave2 <- dat |>
-  filter(date >= as.Date("2020-07-01") & date <= as.Date("2021-05-30")) |>
+wave3_dates <- wave_rects[3, ]
+
+dat_wave3 <- dat |>
+  filter(date >= wave3_dates$start_date & date <= wave3_dates$end_date) |>
   mutate(death_rate = deaths / pop * 100000) |>
   group_by(region, state) |>
   summarise(
@@ -461,8 +444,7 @@ ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = 
   ggrepel::geom_text_repel(size = 3) +
   theme_minimal(base_size = 13) +
   labs(
-    title = "Series Uptake vs. Average Death Rate in Wave 2 (2020-07 to 2021-05)",
-    subtitle = "Alpha variant period — boosters began rolling out",
+    title = "Series Uptake vs. Average Death Rate in Wave 3",
     x = "Vaccination Rate by End of Wave (%)",
     y = "Average Death Rate (per 100k)",
     color = "Region"
@@ -471,25 +453,26 @@ ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = 
 ### Vaccination(booster) vs death rate in wave3 (2021/06/01-2021/10/31)
 
 ```{r}
-dat_wave3 <- dat |>
-  filter(date >= as.Date("2021-06-01") & date <= as.Date("2021-10-31")) |>
-   mutate(death_rate = deaths / pop * 100000) |>
+wave4_dates <- wave_rects[4, ]
+
+dat_wave4 <- dat |>
+  filter(date >= wave3_dates$start_date & date <= wave3_dates$end_date) |>
+  mutate(death_rate = deaths / pop * 100000) |>
   group_by(region, state) |>
   summarise(
-    booster_rate = max(booster, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
+    vax_rate = max(series, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
     mean_death_rate = mean(death_rate, na.rm = TRUE),
     .groups = "drop"
   )
 
-ggplot(dat_wave3, aes(x = booster_rate, y = mean_death_rate, label = state, color = region)) +
+ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
   geom_point(alpha = 0.8, size = 3) +
-  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
   ggrepel::geom_text_repel(size = 3) +
   theme_minimal(base_size = 13) +
   labs(
-    title = "Booster Uptake vs. Average Death Rate in Wave 3 (2021-06 to 2021-10)",
-    subtitle = "Delta variant period — boosters began rolling out",
-    x = "Booster Rate by End of Wave (%)",
+    title = "Booster Uptake vs. Average Death Rate in Wave 4",
+    x = "Vaccination Rate by End of Wave (%)",
     y = "Average Death Rate (per 100k)",
     color = "Region"
   )
