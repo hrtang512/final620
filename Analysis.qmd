@@ -5,7 +5,7 @@ format: html
 
 ```{r}
 if(!require("pacman")) install.packages("pacman")
-pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, splines, usmap, ggplot2, tidytext, usmap, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr,zoo)
+pacman::p_load(tidyverse, gtsummary, kableExtra, broom, lme4, splines, ggeffects, nlme, usmap, ggplot2, tidytext, gganimate, gifski, dplyr, lubridate, transformr, forcats, tidyr, zoo, colorspace, purrr)
 ```
 
 
@@ -235,14 +235,74 @@ ggplot(dat_us, aes(x = date)) +
   geom_line(aes(y = cases_std, color = "Cases"), linewidth = 0.8) +
   geom_line(aes(y = hosp_std, color = "Hospitalizations"), linewidth = 0.8) +
   geom_line(aes(y = deaths_std, color = "Deaths"), linewidth = 1.2) +
-  scale_color_manual(values = c("Cases" = "blue", "Hospitalizations" = "orange", "Deaths" = "black")) +
+  scale_color_manual(values = c("Cases" = "blue", "Hospitalizations" = "darkgreen", "Deaths" = "black")) +
   scale_fill_brewer(name = "Wave Start Date") +
   labs(
-    title = "COVID-19 Death Waves with Standardized Smoothed Trends",
+    title = "COVID-19 Waves with Standardized Smoothed Trends",
     x = "Date",
     y = "Relative Level (Standardized 0–1)",
     color = "Metric"
   ) +
+  theme_minimal(base_size = 14) +
+  guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+
+vax_df <- dat |>
+  group_by(date) |>
+  summarise(pop = sum(pop), 
+            series = sum(series, na.rm = TRUE),
+            booster = sum(booster, na.rm = TRUE),
+            .groups = "drop") |>
+  mutate(series_pct = series / pop * 100,
+         booster_pct = booster / pop * 100)
+
+# 合并疫苗数据到 dat_us
+dat_us <- left_join(dat_us, vax_df |> select(date, series_pct, booster_pct), by = "date")
+
+# 绘图
+ggplot(dat_us, aes(x = date)) +
+  # 波段背景
+  geom_rect(data = wave_rects,
+            aes(xmin = start_date, xmax = end_date, ymin = -Inf, ymax = Inf, fill = label),
+            alpha = 0.15, inherit.aes = FALSE) +
+  
+  # 标准化曲线
+  geom_line(aes(y = cases_std, color = "Cases"), linewidth = 0.8) +
+  geom_line(aes(y = hosp_std, color = "Hospitalizations"), linewidth = 0.8) +
+  geom_line(aes(y = deaths_std, color = "Deaths"), linewidth = 1.2) +
+
+  # 疫苗接种趋势（用第二y轴比例缩放）
+  geom_line(aes(y = series_pct / 100, color = "Primary Series"), linewidth = 1, linetype = "dashed") +
+  geom_line(aes(y = booster_pct / 100, color = "Booster"), linewidth = 1, linetype = "dotted") +
+
+  # 设置颜色
+  scale_color_manual(
+    name = "Metric",
+    values = c("Cases" = "blue", 
+               "Hospitalizations" = "darkgreen", 
+               "Deaths" = "black",
+               "Primary Series" = "orange",
+               "Booster" = "purple")
+  ) +
+
+  # 填充图例
+  scale_fill_brewer(name = "Wave Start Date") +
+
+  # 坐标轴与标题
+  labs(
+    title = "COVID-19 Waves with Standardized Trends and Vaccination Rates",
+    x = "Date",
+    y = "Relative Level (Standardized 0–1)",
+    caption = "Vaccination rates shown as % / 100 for overlaying"
+  ) +
+
+  # 图形样式
   theme_minimal(base_size = 14) +
   guides(fill = guide_legend(order = 1), color = guide_legend(order = 2)) +
   theme(
@@ -438,7 +498,7 @@ dat_wave3 <- dat |>
     .groups = "drop"
   )
 
-ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
+ggplot(dat_wave3, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
   geom_point(alpha = 0.8, size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
   ggrepel::geom_text_repel(size = 3) +
@@ -465,7 +525,7 @@ dat_wave4 <- dat |>
     .groups = "drop"
   )
 
-ggplot(dat_wave2, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
+ggplot(dat_wave4, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
   geom_point(alpha = 0.8, size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
   ggrepel::geom_text_repel(size = 3) +
@@ -548,6 +608,8 @@ dat_nofirst2_eda |>
   ) +
   theme_minimal()
 
+
+
 # Heatmap of Vaccination Rate by State, Month, and Region (Faceted by Region)
 state_vax_avg <- dat_nofirst2_eda |>
   group_by(state) |>
@@ -604,6 +666,39 @@ dat_nofirst2_eda |>
   ) +
   theme_minimal()
 
+```
+```{r}
+region_palettes <- map(region_colors_named, ~ lighten(.x, seq(0.2, 1, length.out = 9)))
+booster_plot_data <- dat_nofirst2_eda |>
+  mutate(
+    month = floor_date(date, "month")
+  ) |>
+  left_join(state_booster_avg, by = "state") |>
+  left_join(select(dat, state, region), by = "state") |> 
+  mutate(state = fct_reorder(state, booster_avg)) |>
+  group_by(state, region, month) |>
+  summarise(
+    booster_rate = mean(booster_rate, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    # 分段到 9 个 bin，用于映射深浅色
+    rate_bin = cut(booster_rate, breaks = 9, labels = FALSE, include.lowest = TRUE),
+    # 获取该 region 的调色板
+    base_palette = map(region, ~ region_palettes[[.x]]),
+    # 应用深浅色
+    fill_color = map2_chr(base_palette, rate_bin, ~ .x[.y])
+  )
+
+ggplot(booster_plot_data, aes(x = month, y = state)) +
+  geom_tile(aes(fill = fill_color), color = "white") +
+  scale_fill_identity() +
+  labs(
+    title = "Booster Rate Heatmap by State and Month",
+    subtitle = "Region hue, Rate darkness",
+    x = "Month", y = "State (sorted by avg. Booster Rate)"
+  ) +
+  theme_minimal(base_size = 12)
 ```
 
 ### LME Models
@@ -722,7 +817,8 @@ data.frame(resid = resid(model_lag)) |>
   stat_qq_line(color = "blue") +
   theme_minimal() +
   labs(title = "Q-Q Plot of Residuals")
-```data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAUCAYAAACnOeyiAAAAXklEQVR4XmNgAIL///8zMYSGhjIDGYIMIiIMvECGMwMDN4M4kFEDUqIIZKwDMdSBjAsghj6Q8QPEMAAy/lOBoQekv4AYKkDGfgZeXl4RICOLQUtLiw3IUAJJMQIZ7AC2tU2tJWCy/wAAAABJRU5ErkJggg==
+```
+data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAUCAYAAACnOeyiAAAAXklEQVR4XmNgAIL///8zMYSGhjIDGYIMIiIMvECGMwMDN4M4kFEDUqIIZKwDMdSBjAsghj6Q8QPEMAAy/lOBoQekv4AYKkDGfgZeXl4RICOLQUtLiw3IUAJJMQIZ7AC2tU2tJWCy/wAAAABJRU5ErkJggg==
 
 ### Excess death rate
 ```{r}
