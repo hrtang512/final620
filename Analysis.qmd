@@ -510,29 +510,29 @@ ggplot(dat_wave4, aes(x = vax_rate, y = mean_death_rate, label = state, color = 
     color = "Region"
   )
 ```
-### Vaccination(booster) vs death rate in wave3 (2021/06/01-2021/10/31)
+### Vaccination(booster) vs death rate in wave5
 
 ```{r}
-wave4_dates <- wave_rects[4, ]
+wave5_dates <- wave_rects[5, ]
 
-dat_wave4 <- dat |>
-  filter(date >= wave3_dates$start_date & date <= wave3_dates$end_date) |>
+dat_wave5 <- dat |>
+  filter(date >= wave5_dates$start_date & date <= wave5_dates$end_date) |>
   mutate(death_rate = deaths / pop * 100000) |>
   group_by(region, state) |>
   summarise(
-    vax_rate = max(series, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
+    booster_rate = max(booster, na.rm = TRUE) / max(pop, na.rm = TRUE) * 100,
     mean_death_rate = mean(death_rate, na.rm = TRUE),
     .groups = "drop"
   )
 
-ggplot(dat_wave4, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
+ggplot(dat_wave5, aes(x = booster_rate, y = mean_death_rate, label = state, color = region)) +
   geom_point(alpha = 0.8, size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
   ggrepel::geom_text_repel(size = 3) +
   theme_minimal(base_size = 13) +
   labs(
-    title = "Booster Uptake vs. Average Death Rate in Wave 4",
-    x = "Vaccination Rate by End of Wave (%)",
+    title = "Booster Uptake vs. Average Death Rate in Wave 5",
+    x = "Booster Uptake by End of Wave (%)",
     y = "Average Death Rate (per 100k)",
     color = "Region"
   )
