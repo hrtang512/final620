@@ -484,12 +484,12 @@ p <- dat |> group_by(date) |> summarise(pop = sum(pop), series = sum(series),
 print(p)
 ```
 
-### Vaccination(series) vs death rate in wave2 (2020/07/01-2021/05/30)
+### Vaccination(series) vs death rate in wave4
 ```{r}
-wave3_dates <- wave_rects[3, ]
+wave4_dates <- wave_rects[4, ]
 
-dat_wave3 <- dat |>
-  filter(date >= wave3_dates$start_date & date <= wave3_dates$end_date) |>
+dat_wave4 <- dat |>
+  filter(date >= wave4_dates$start_date & date <= wave4_dates$end_date) |>
   mutate(death_rate = deaths / pop * 100000) |>
   group_by(region, state) |>
   summarise(
@@ -498,13 +498,13 @@ dat_wave3 <- dat |>
     .groups = "drop"
   )
 
-ggplot(dat_wave3, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
+ggplot(dat_wave4, aes(x = vax_rate, y = mean_death_rate, label = state, color = region)) +
   geom_point(alpha = 0.8, size = 3) +
   geom_smooth(method = "lm", se = FALSE, color = "black", linewidth = 0.8) +  
   ggrepel::geom_text_repel(size = 3) +
   theme_minimal(base_size = 13) +
   labs(
-    title = "Series Uptake vs. Average Death Rate in Wave 3",
+    title = "Series Uptake vs. Average Death Rate in Wave 4",
     x = "Vaccination Rate by End of Wave (%)",
     y = "Average Death Rate (per 100k)",
     color = "Region"
